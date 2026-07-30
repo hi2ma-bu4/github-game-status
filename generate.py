@@ -7,6 +7,7 @@ import datetime
 import urllib.request
 import json
 import base64
+import re
 from io import BytesIO
 from PIL import Image
 
@@ -76,11 +77,11 @@ def fetch_github_data(token, username):
         return result['data']['user']
 
 # -----------------------------------------------------------------------------
-# 2. Font Subsetting Engine (必要文字のみ抽出してBase64化)
+# 2. Dynamic Font Subsetting Engine
 # -----------------------------------------------------------------------------
 def subset_and_encode_font(font_path, text_to_embed):
     """
-    指定された文字(text_to_embed)のみをフォントから抽出(サブセット化)し、
+    指定された文字(text_to_embed)のみをフォントから動的に抽出(サブセット化)し、
     Base64文字列として返却する
     """
     if not os.path.exists(font_path):
@@ -91,23 +92,19 @@ def subset_and_encode_font(font_path, text_to_embed):
         # 重複文字の排除
         unique_text = "".join(set(text_to_embed))
 
-        # fontTools によるサブセット処理
         font = TTFont(font_path)
         options = Options()
-        options.flavor = 'woff'  # 軽量な WOFF 形式に変換
+        options.flavor = 'woff'
         
         subsetter = Subsetter(options=options)
         subsetter.populate(text=unique_text)
         subsetter.subset(font)
 
-        # メモリ上に WOFF を書き出し
         buf = BytesIO()
         font.save(buf)
         font.close()
         
-        # Base64 エンコード
-        base64_font = base64.b64encode(buf.getvalue()).decode('utf-8')
-        return base64_font
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
     except Exception as e:
         print(f"Error during font subsetting: {e}")
         return None
@@ -116,19 +113,19 @@ def subset_and_encode_font(font_path, text_to_embed):
 # 3. Logic & Calculations
 # -----------------------------------------------------------------------------
 JOB_CATEGORIES = {
-    '賢者': ['Python', 'JavaScript', 'Ruby', 'PHP', 'Lua', 'Perl', 'Shell', 'R'],
-    '魔導士': ['TypeScript', 'Java', 'C#', 'Go', 'Kotlin', 'Swift', 'Scala', 'Dart', 'Haskell'],
-    '騎士': ['Dockerfile', 'HCL', 'Nix', 'Yaml', 'Makefile', 'PLpgSQL'],
-    '鍛冶師': ['C', 'C++', 'Rust', 'Assembly', 'Zig', 'SystemVerilog']
+    'SAGE': ['Python', 'JavaScript', 'Ruby', 'PHP', 'Lua', 'Perl', 'Shell', 'R'],
+    'MAGE': ['TypeScript', 'Java', 'C#', 'Go', 'Kotlin', 'Swift', 'Scala', 'Dart', 'Haskell'],
+    'KNIGHT': ['Dockerfile', 'HCL', 'Nix', 'Yaml', 'Makefile', 'PLpgSQL'],
+    'SMITH': ['C', 'C++', 'Rust', 'Assembly', 'Zig', 'SystemVerilog']
 }
 
 def determine_job(main_lang):
     if not main_lang:
-        return "見習い"
+        return "NOVICE"
     for job, langs in JOB_CATEGORIES.items():
         if any(l.lower() == main_lang.lower() for l in langs):
             return job
-    return "勇者"
+    return "HERO"
 
 def calculate_status(data):
     created_year = int(data['createdAt'][:4])
@@ -146,7 +143,7 @@ def calculate_status(data):
             lang_sizes[l_name] = lang_sizes.get(l_size, 0) + l_size
 
     sorted_langs = sorted(lang_sizes.items(), key=lambda x: x[1], reverse=True)
-    main_lang = sorted_langs[0][0] if sorted_langs else "なし"
+    main_lang = sorted_langs[0][0] if sorted_langs else "None"
     dex = len(lang_sizes)
 
     weeks = data['contributionsCollection']['contributionCalendar']['weeks']
@@ -188,13 +185,13 @@ def calculate_status(data):
             weekday_commits += d['contributionCount']
 
     if active_days_streak >= 30:
-        status_effects.append("ゾーン")
+        status_effects.append("BURNING")
     
     if weekday_commits > 0 and (weekend_commits / (weekday_commits + weekend_commits)) > 0.8:
-        status_effects.append("過労")
+        status_effects.append("OVERWORK")
 
     if agi_stat > 50 and str_stat == 0:
-        status_effects.append("透明化")
+        status_effects.append("GHOST")
 
     inactive_days = 0
     for d in reversed(days):
@@ -204,11 +201,11 @@ def calculate_status(data):
             break
 
     if inactive_days >= 365:
-        status_effects.append("石化")
+        status_effects.append("PETRIFIED")
     elif inactive_days >= 90:
-        status_effects.append("氷結")
+        status_effects.append("FROZEN")
     elif inactive_days >= 30:
-        status_effects.append("睡眠")
+        status_effects.append("SLEEP")
 
     return {
         'lv': lv,
@@ -258,56 +255,33 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
         return '<rect x="0" y="0" width="96" height="96" fill="#555" />'
 
 # -----------------------------------------------------------------------------
-# 5. SVG Renderer & Font Embedding
+# 5. SVG Renderer & Automated Font Embedding
 # -----------------------------------------------------------------------------
 def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
-    status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[通常]"
+    status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[NORMAL]"
     
     hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
     mp_pct = min(1.0, data['mp_cur'] / max(1, data['mp_max']))
     
     username = user_info['name'] if user_info.get('name') else user_info['login']
 
-    # SVG内部で使用する「全文字列」を集約してフォント切り出しを行う
-    all_text = (
-        f"LV.{data['lv']} {username} 職業:{data['job']} HP MP 通常 状態: {status_str} "
-        f"-- 能力値 -- 腕力(PR):{data['str']} 敏捷(CMT):{data['agi']} 知力(REP):{data['int']} "
-        f"器用(LNG):{data['dex']} 幸運(STR):{data['luk']} -- 装備 -- "
-        f"主武器:{data['main_weapon']} 副武器:{sub_weapon} 装飾品:{accessory} "
-        f"{data['hp_cur']}/{data['hp_max']} {data['mp_cur']}/{data['mp_max']}"
-    )
-
-    base64_font = subset_and_encode_font(font_path, all_text)
-
-    # フォント埋め込みCSSの生成
-    if base64_font:
-        font_face_css = f"""
-        @font-face {{
-          font-family: 'PixelCustomFont';
-          src: url('data:font/woff;charset=utf-8;base64,{base64_font}') format('woff');
-          font-weight: normal;
-          font-style: normal;
-        }}
-        .pixel-text {{
-          font-family: 'PixelCustomFont', monospace;
-          font-size: 12px;
-          image-rendering: pixelated;
-        }}
-        """
-    else:
-        # フォントがない場合のフォールバック
-        font_face_css = """
-        .pixel-text {
-          font-family: 'Courier New', monospace;
-          font-weight: bold;
-          font-size: 12px;
-        }
-        """
-
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
+    # SVGテンプレート（フォント定義プレースホルダー含む）
+    svg_template = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
+    <!-- ドット調ピクセル背景パターン -->
+    <pattern id="pixel-grid" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#edd2a8" />
+      <rect width="2" height="2" fill="#e2c496" />
+      <rect x="2" y="2" width="2" height="2" fill="#e2c496" />
+    </pattern>
+    <pattern id="pixel-grid-dark" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#29223d" />
+      <rect width="2" height="2" fill="#201a30" />
+      <rect x="2" y="2" width="2" height="2" fill="#201a30" />
+    </pattern>
+
     <style>
-      {font_face_css}
+      /*FONT_PLACEHOLDER*/
 
       /* カラー設定 */
       .txt-main {{ fill: #2b1d0c; }}
@@ -315,8 +289,10 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       .txt-badge {{ fill: #8c4a00; }}
 
       .bg-outer {{ fill: #d8c29d; stroke: #4a3525; stroke-width: 4; }}
-      .bg-parchment {{ fill: #f2e3c6; filter: url(#paper-texture); }}
-      .panel {{ fill: #edd2a8; stroke: #735338; stroke-width: 2; filter: url(#paper-texture); }}
+      .bg-parchment {{ fill: #f2e3c6; }}
+      
+      /* ドット模様背景パネル */
+      .panel {{ fill: url(#pixel-grid); stroke: #735338; stroke-width: 2; }}
       .panel-inner {{ fill: #fdf6e7; stroke: #bfa17c; stroke-width: 1; }}
       .bar-bg {{ fill: #c7b08b; stroke: #8c6d53; stroke-width: 1; }}
       .bar-hp {{ fill: #d32f2f; }}
@@ -329,14 +305,14 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
         .txt-badge {{ fill: #ffb040; }}
         .bg-outer {{ fill: #15121e; stroke: #6b529c; }}
         .bg-parchment {{ fill: #1f1a2e; }}
-        .panel {{ fill: #29223d; stroke: #513e78; }}
+        .panel {{ fill: url(#pixel-grid-dark); stroke: #513e78; }}
         .panel-inner {{ fill: #14111f; stroke: #3d305c; }}
         .bar-bg {{ fill: #1a1528; stroke: #453566; }}
         .bar-hp {{ fill: #ff4545; }}
         .bar-mp {{ fill: #3892ff; }}
       }}
 
-      /* ドット単位でカクカク変化するアニメーション */
+      /* アニメーション */
       @keyframes dot-flash-sharp {{
         0% {{ filter: brightness(1); }}
         10% {{ filter: brightness(2.8); }}
@@ -347,14 +323,6 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
         animation: dot-flash-sharp 3s infinite steps(2, start);
       }}
     </style>
-
-    <filter id="paper-texture" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
-      <feDiffuseLighting in="noise" lighting-color="#ffffff" surfaceScale="1.2" result="light">
-        <feDistantLight azimuth="45" elevation="60" />
-      </feDiffuseLighting>
-      <feBlend mode="multiply" in="SourceGraphic" in2="light" result="blend" />
-    </filter>
   </defs>
 
   <!-- Frame -->
@@ -364,8 +332,8 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <!-- Header -->
   <rect class="panel" x="16" y="16" width="488" height="40" rx="2" />
   <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="1" />
-  <text class="pixel-text txt-main" x="30" y="41">LV.{data['lv']} {username}</text>
-  <text class="pixel-text txt-main" x="330" y="41">職業:{data['job']}</text>
+  <text class="pixel-text txt-main" x="30" y="41">Lv.{data['lv']} {username}</text>
+  <text class="pixel-text txt-main" x="330" y="41">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars -->
   <rect class="panel" x="16" y="62" width="488" height="112" rx="2" />
@@ -388,27 +356,70 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
   <!-- Status -->
-  <text class="pixel-text txt-badge" x="134" y="152">状態: {status_str}</text>
+  <text class="pixel-text txt-badge" x="134" y="152">STATE: {status_str}</text>
 
   <!-- Bottom Left: Stats -->
   <rect class="panel" x="16" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="20" y="184" width="228" height="116" rx="1" />
-  <text class="pixel-text txt-main" x="30" y="204">-- 能力値 --</text>
-  <text class="pixel-text txt-sub" x="30" y="224">腕力(PR) : {data['str']}</text>
-  <text class="pixel-text txt-sub" x="30" y="239">敏捷(CMT): {data['agi']}</text>
-  <text class="pixel-text txt-sub" x="30" y="254">知力(REP): {data['int']}</text>
-  <text class="pixel-text txt-sub" x="30" y="269">器用(LNG): {data['dex']}</text>
-  <text class="pixel-text txt-sub" x="30" y="284">幸運(STR): {data['luk']}</text>
+  <text class="pixel-text txt-main" x="30" y="204">-- STATS --</text>
+  <text class="pixel-text txt-sub" x="30" y="224">STR(PR)  : {data['str']}</text>
+  <text class="pixel-text txt-sub" x="30" y="239">AGI(CMT) : {data['agi']}</text>
+  <text class="pixel-text txt-sub" x="30" y="254">INT(REP) : {data['int']}</text>
+  <text class="pixel-text txt-sub" x="30" y="269">DEX(LNG) : {data['dex']}</text>
+  <text class="pixel-text txt-sub" x="30" y="284">LUK(STR) : {data['luk']}</text>
 
-  <!-- Bottom Right: Equipments -->
+  <!-- Bottom Right: Equipments (表示幅拡張・途切れ防止) -->
   <rect class="panel" x="268" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="272" y="184" width="228" height="116" rx="1" />
-  <text class="pixel-text txt-main" x="282" y="204">-- 装備 --</text>
-  <text class="pixel-text txt-sub" x="282" y="228">主武器 : {data['main_weapon'][:8]}</text>
-  <text class="pixel-text txt-sub" x="282" y="250">副武器 : {sub_weapon[:8]}</text>
-  <text class="pixel-text txt-sub" x="282" y="272">装飾品 : {accessory[:8]}</text>
+  <text class="pixel-text txt-main" x="282" y="204">-- EQUIP --</text>
+  <text class="pixel-text txt-sub" x="282" y="228">M-WPN : {data['main_weapon'][:14]}</text>
+  <text class="pixel-text txt-sub" x="282" y="250">S-WPN : {sub_weapon[:14]}</text>
+  <text class="pixel-text txt-sub" x="282" y="272">ACC   : {accessory[:14]}</text>
 </svg>"""
-    return svg
+
+    # --- フォント自動抽出処理 (SVG内の全<text>タグから自動抽出) ---
+    raw_svg_text = svg_template.format(
+        data=data,
+        username=username,
+        avatar_rects=avatar_rects,
+        status_str=status_str,
+        hp_pct=hp_pct,
+        mp_pct=mp_pct,
+        sub_weapon=sub_weapon,
+        accessory=accessory
+    )
+
+    # <text>...</text> タグで描画されている全文字列を正規表現で自動取得
+    extracted_text_nodes = re.findall(r'<text[^>]*>(.*?)</text>', raw_svg_text, re.DOTALL)
+    extracted_all_characters = "".join(extracted_text_nodes)
+
+    base64_font = subset_and_encode_font(font_path, extracted_all_characters)
+
+    if base64_font:
+        font_face_css = f"""
+        @font-face {{
+          font-family: 'PixelCustomFont';
+          src: url('data:font/woff;charset=utf-8;base64,{base64_font}') format('woff');
+          font-weight: normal;
+          font-style: normal;
+        }}
+        .pixel-text {{
+          font-family: 'PixelCustomFont', monospace;
+          font-size: 12px;
+          image-rendering: pixelated;
+        }}
+        """
+    else:
+        font_face_css = """
+        .pixel-text {
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+          font-size: 12px;
+        }
+        """
+
+    # プレースホルダーを実際のCSSに置換して完全なSVGを返却
+    return raw_svg_text.replace("/*FONT_PLACEHOLDER*/", font_face_css)
 
 # -----------------------------------------------------------------------------
 # Main Execution
@@ -417,8 +428,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--token', required=True)
     parser.add_argument('--username', required=True)
-    parser.add_argument('--sub-weapons', default="聖なる剣,盾,魔法の杖,クナイ,伝説の盾")
-    parser.add_argument('--accessories', default="指輪,アミュレット,ブーツ,マント")
+    parser.add_argument('--sub-weapons', default="Aegis Shield,Magic Wand,Kunai,Holy Bible,Master Sword")
+    parser.add_argument('--accessories', default="Ring of Power,Amulet of Life,Hermes Boots,Pendant of Wisdom")
     parser.add_argument('--font-path', default="font.ttf")
     parser.add_argument('--output', default="status.svg")
     args = parser.parse_args()
@@ -442,4 +453,4 @@ if __name__ == "__main__":
     with open(args.output, 'w', encoding='utf-8') as f:
         f.write(svg_content)
 
-    print(f"Successfully generated {args.output} with embedded subset font!")
+    print(f"Successfully generated {args.output} with auto-extracted font subset!")
