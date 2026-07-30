@@ -11,7 +11,6 @@ import re
 from io import BytesIO
 from PIL import Image
 
-# フォントサブセット化ライブラリ
 from fontTools.ttLib import TTFont
 from fontTools.subset import Subsetter, Options
 
@@ -275,7 +274,7 @@ def get_status_icon(effect):
         return '<path fill="#66bb6a" d="M3,0 h2 v2 h-2 Z M0,3 h8 v2 h-8 Z M3,6 h2 v2 h-2 Z"/>'
 
 # -----------------------------------------------------------------------------
-# 5. Avatar Pixel Art Generator (アバターに完全に沿ったドット銀縁)
+# 5. Avatar Pixel Art Generator (アバター＆銀縁生成)
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=16):
     try:
@@ -287,32 +286,38 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
         img_small = img.resize((size, size), Image.Resampling.LANCZOS)
         img_16colors = img_small.quantize(colors=16).convert('RGB')
         
-        rects_svg = []
-        scale = 5  # 16*5 = 80px
+        avatar_dots_svg = []
+        scale = 5  # 16 * 5 = 80px
         
-        # 1. アバター画像（80x80px）
+        # 1. アバター画像（ドット）
         for y in range(size):
             for x in range(size):
                 r, g, b = img_16colors.getpixel((x, y))
                 color_hex = f"#{r:02x}{g:02x}{b:02x}"
                 delay = round(((x + y) / (size * 2)) * 1.5, 2)
                 
-                rects_svg.append(
+                avatar_dots_svg.append(
                     f'<rect class="px-dot" x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" '
                     f'fill="{color_hex}" style="animation-delay: {delay}s;" />'
                 )
         
-        # 2. アイコンの周囲にぴったり重ねるドット銀縁（丸角の角が少し重なるジャストサイズ）
+        # 2. 銀縁フレーム（外枠と内光沢）
         silver_frame_path = make_pixel_panel(-2, -2, size*scale + 4, size*scale + 4, corner=3)
         silver_inner_path = make_pixel_panel(0, 0, size*scale, size*scale, corner=2)
         
-        frame_svg = f'''
-        <path fill="#e0e0e0" stroke="#808080" stroke-width="1.5" d="{silver_frame_path}" />
+        return f'''
+        <!-- 背景ベース -->
+        <path fill="#1a120b" d="{silver_frame_path}" />
+        
+        <!-- アバター画像 -->
+        <g>
+          {"".join(avatar_dots_svg)}
+        </g>
+        
+        <!-- アイコンにぴったり重なる最前面の銀縁 -->
+        <path fill="none" stroke="#c0c0c0" stroke-width="2" d="{silver_frame_path}" />
         <path fill="none" stroke="#ffffff" stroke-width="1" d="{silver_inner_path}" opacity="0.6" />
         '''
-        
-        # 銀縁をベースの上に重ねる
-        return "".join(rects_svg) + frame_svg
     except Exception as e:
         print(f"Failed to process avatar: {e}")
         return '<rect x="0" y="0" width="80" height="80" fill="#555" />'
@@ -352,7 +357,6 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     s_wpn_str = truncate_text(sub_weapon, 13)
     acc_str   = truncate_text(accessory, 13)
 
-    # ステータス別オーラCSSクラス
     status_aura_class = f"aura-{first_effect.lower()}"
 
     raw_svg_text = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
@@ -375,7 +379,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       <stop offset="100%" stop-color="#120e1c" />
     </linearGradient>
 
-    <!-- HP/MP ゆらめきアニメーション用グラデーション -->
+    <!-- HP/MP 流動アニメーション用グラデーション -->
     <linearGradient id="hp-wave-grad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#d32f2f" />
       <stop offset="30%" stop-color="#ff6666" />
@@ -399,7 +403,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       .txt-badge {{ fill: #ffb040; }}
 
       .bg-outer {{ fill: #4a3525; stroke: #2b1d0c; stroke-width: 2; }}
-      .bg-parchment {{ fill: #d8c29d; }}
+      .bg-parchment {{ fill: #d8c29d; transition: fill 0.5s ease; }}
       .bg-noise-layer {{ fill: #000000; filter: url(#bg-noise); }}
 
       .panel-outer {{ fill: #8c6d53; }}
@@ -408,33 +412,53 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       
       .bar-bg {{ fill: #140d07; stroke: #5c4533; stroke-width: 1; }}
       
-      /* HP/MPゲージの流動アニメーション */
-      @keyframes bar-wave {{
-        0% {{ x: 0px; }}
-        100% {{ x: -50px; }}
-      }}
+      /* -------------------------------------------------- */
+      /* 多彩なオーラ・ステータス演出                       */
+      /* -------------------------------------------------- */
       
-      .bar-hp {{
-        fill: url(#hp-wave-grad);
-      }}
-      .bar-mp {{
-        fill: url(#mp-wave-grad);
-      }}
-
-      /* ステータス別オーラ演出 */
-      @keyframes aura-burn-pulse {{
+      /* [BURNING] 火炎オーラ */
+      @keyframes aura-burn-frame {{
         0% {{ stroke: #ff3300; filter: drop-shadow(0 0 2px #ff3300); }}
-        50% {{ stroke: #ff9900; filter: drop-shadow(0 0 6px #ff9900); }}
+        50% {{ stroke: #ff9900; filter: drop-shadow(0 0 8px #ff5500); }}
         100% {{ stroke: #ff3300; filter: drop-shadow(0 0 2px #ff3300); }}
       }}
-      @keyframes aura-freeze-pulse {{
+      .aura-burning {{
+        animation: aura-burn-frame 1.2s infinite alternate;
+        stroke-width: 2px !important;
+      }}
+
+      /* [FROZEN] 凍結シマー */
+      @keyframes aura-freeze-frame {{
         0% {{ stroke: #00d2ff; filter: drop-shadow(0 0 2px #00d2ff); }}
-        50% {{ stroke: #80e5ff; filter: drop-shadow(0 0 6px #80e5ff); }}
+        50% {{ stroke: #e0f7fa; filter: drop-shadow(0 0 6px #80e5ff); }}
         100% {{ stroke: #00d2ff; filter: drop-shadow(0 0 2px #00d2ff); }}
       }}
-      
-      .aura-burning {{ animation: aura-burn-pulse 1.5s infinite alternate; stroke-width: 2px !important; }}
-      .aura-frozen  {{ animation: aura-freeze-pulse 2s infinite alternate; stroke-width: 2px !important; }}
+      .aura-frozen {{
+        animation: aura-freeze-frame 2.5s infinite alternate;
+        stroke-width: 2px !important;
+      }}
+
+      /* [OVERWORK] 過負荷・パルス */
+      @keyframes aura-overwork-frame {{
+        0% {{ stroke: #ffee58; opacity: 1; }}
+        20% {{ stroke: #f57f17; opacity: 0.6; }}
+        40% {{ stroke: #ffee58; opacity: 1; }}
+        100% {{ stroke: #f57f17; opacity: 0.8; }}
+      }}
+      .aura-overwork {{
+        animation: aura-overwork-frame 0.8s infinite steps(2, start);
+        stroke-width: 2px !important;
+      }}
+
+      /* [GHOST/SLEEP] 幽幻・静寂 */
+      @keyframes aura-ghost-frame {{
+        0% {{ stroke: #b0bec5; filter: drop-shadow(0 0 2px #78909c); }}
+        100% {{ stroke: #78909c; filter: drop-shadow(0 0 5px #b0bec5); }}
+      }}
+      .aura-ghost, .aura-sleep {{
+        animation: aura-ghost-frame 3s infinite alternate;
+        stroke-width: 1.5px !important;
+      }}
 
       /* ダークモード対応 */
       @media (prefers-color-scheme: dark) {{
@@ -455,7 +479,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
 
       @keyframes dot-flash-sharp {{
         0% {{ filter: brightness(1); }}
-        10% {{ filter: brightness(2.8); }}
+        10% {{ filter: brightness(2.5); }}
         20% {{ filter: brightness(1); }}
         100% {{ filter: brightness(1); }}
       }}
@@ -477,12 +501,12 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-main" x="30" y="41">Lv.{data['lv']} {display_name} <tspan class="txt-id">({login_id})</tspan></text>
   <text class="pixel-text txt-main" x="350" y="41">JOB:{data['job']}</text>
 
-  <!-- Avatar & Bars -->
+  <!-- Avatar & Bars Panel -->
   <path class="panel-outer {status_aura_class}" d="{p_mid_out}" />
   <path class="panel-inner" d="{p_mid_in}" />
   {gold_m}
   
-  <!-- Avatar (銀縁がアバターにジャストフィット) -->
+  <!-- Avatar  -->
   <g transform="translate(32, 78)">
     {avatar_rects}
   </g>
@@ -601,4 +625,4 @@ if __name__ == "__main__":
     with open(args.output, 'w', encoding='utf-8') as f:
         f.write(svg_content)
 
-    print(f"Successfully generated {args.output} with animated bars and status auras!")
+    print(f"Successfully generated {args.output} with layered avatar and enhanced status auras!")
