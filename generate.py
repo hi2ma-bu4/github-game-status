@@ -140,7 +140,7 @@ def calculate_status(data):
         for edge in repo['languages']['edges']:
             l_name = edge['node']['name']
             l_size = edge['size']
-            lang_sizes[l_name] = lang_sizes.get(l_size, 0) + l_size
+            lang_sizes[l_name] = lang_sizes.get(l_name, 0) + l_size
 
     sorted_langs = sorted(lang_sizes.items(), key=lambda x: x[1], reverse=True)
     main_lang = sorted_langs[0][0] if sorted_langs else "None"
@@ -265,8 +265,8 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     
     username = user_info['name'] if user_info.get('name') else user_info['login']
 
-    # SVGテンプレート（フォント定義プレースホルダー含む）
-    svg_template = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
+    # f-string で直接構築 (CSSのカッコは {{ }} でエスケープ)
+    raw_svg_text = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
     <!-- ドット調ピクセル背景パターン -->
     <pattern id="pixel-grid" width="4" height="4" patternUnits="userSpaceOnUse">
@@ -378,18 +378,6 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
 </svg>"""
 
     # --- フォント自動抽出処理 (SVG内の全<text>タグから自動抽出) ---
-    raw_svg_text = svg_template.format(
-        data=data,
-        username=username,
-        avatar_rects=avatar_rects,
-        status_str=status_str,
-        hp_pct=hp_pct,
-        mp_pct=mp_pct,
-        sub_weapon=sub_weapon,
-        accessory=accessory
-    )
-
-    # <text>...</text> タグで描画されている全文字列を正規表現で自動取得
     extracted_text_nodes = re.findall(r'<text[^>]*>(.*?)</text>', raw_svg_text, re.DOTALL)
     extracted_all_characters = "".join(extracted_text_nodes)
 
