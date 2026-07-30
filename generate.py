@@ -380,14 +380,14 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     </linearGradient>
 
     <!-- HP/MP 流動アニメーション用グラデーション -->
-    <linearGradient id="hp-wave-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+    <linearGradient id="hp-grad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#d32f2f" />
       <stop offset="30%" stop-color="#ff6666" />
       <stop offset="60%" stop-color="#d32f2f" />
       <stop offset="100%" stop-color="#9a0007" />
     </linearGradient>
 
-    <linearGradient id="mp-wave-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+    <linearGradient id="mp-grad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#1976d2" />
       <stop offset="30%" stop-color="#64b5f6" />
       <stop offset="60%" stop-color="#1976d2" />
@@ -411,6 +411,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       .gold-decor  {{ fill: #f5d061; }}
       
       .bar-bg {{ fill: #140d07; stroke: #5c4533; stroke-width: 1; }}
+
+      .bar-hp {{ fill: url(#hp-grad); }}
+      .bar-mp {{ fill: url(#mp-grad); }}
       
       /* -------------------------------------------------- */
       /* 多彩なオーラ・ステータス演出                       */
@@ -518,7 +521,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-main" x="146" y="91">HP</text>
   <rect class="bar-bg" x="170" y="81" width="172" height="12" />
   <svg x="170" y="81" width="172" height="12">
-    <rect class="bar-hp" x="0" y="0" width="{int(172 * hp_pct)}" height="12" />
+    <rect class="bar-hp" x="0" y="0" width="{int(172 * hp_pct)}" height="12">
+      <animate attributeName="x" from="0" to="-40" dur="2s" repeatCount="indefinite" />
+    </rect>
   </svg>
   <text class="pixel-text txt-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
 
@@ -529,7 +534,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-main" x="146" y="117">MP</text>
   <rect class="bar-bg" x="170" y="107" width="172" height="12" />
   <svg x="170" y="107" width="172" height="12">
-    <rect class="bar-mp" x="0" y="0" width="{int(172 * mp_pct)}" height="12" />
+    <rect class="bar-mp" x="0" y="0" width="{int(172 * mp_pct)}" height="12">
+      <animate attributeName="x" from="0" to="-40" dur="2s" repeatCount="indefinite" />
+    </rect>
   </svg>
   <text class="pixel-text txt-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
