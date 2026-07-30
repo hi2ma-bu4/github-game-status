@@ -230,35 +230,105 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[Normal]"
     
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
-  <style>
-    .bg {{ fill: #f4f4f6; stroke: #222; stroke-width: 4; }}
-    .panel {{ fill: #ffffff; stroke: #333; stroke-width: 2; }}
-    .text-main {{ font-family: 'Courier New', monospace; font-weight: bold; fill: #111111; font-size: 14px; }}
-    .text-sub {{ font-family: 'Courier New', monospace; fill: #555555; font-size: 12px; }}
-    .bar-bg {{ fill: #e0e0e0; }}
-    .bar-hp {{ fill: #e53935; }}
-    .bar-mp {{ fill: #1e88e5; }}
-    .status-badge {{ font-family: 'Courier New', monospace; font-weight: bold; fill: #888888; font-size: 12px; opacity: 0.6; }}
+  <defs>
+    <!-- ドットフォントのインポート -->
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DotGothic16&amp;family=Press+Start+2P&amp;display=swap');
 
-    @media (prefers-color-scheme: dark) {{
-      .bg {{ fill: #0f0f15; stroke: #e0e0e0; }}
-      .panel {{ fill: #181824; stroke: #444466; }}
-      .text-main {{ fill: #00ff66; }}
-      .text-sub {{ fill: #aaaaff; }}
-      .bar-bg {{ fill: #333344; }}
-      .bar-hp {{ fill: #ff5252; }}
-      .bar-mp {{ fill: #448aff; }}
-      .status-badge {{ fill: #ffaa00; opacity: 0.8; }}
-    }}
-  </style>
+      /* 基本のフォント設定 */
+      .font-pixel {{
+        font-family: 'Press Start 2P', 'DotGothic16', monospace;
+      }}
 
-  <!-- Outer Window -->
-  <rect class="bg" x="4" y="4" width="512" height="312" rx="8" />
+      /* --- ライトモード (明るい羊皮紙風) --- */
+      .bg-parchment {{
+        fill: #f5ea38; /* ベースカラー */
+        filter: url(#paper-texture);
+      }}
+      .window-border {{
+        fill: #e0cca0;
+        stroke: #5c4033;
+        stroke-width: 4;
+      }}
+      .panel {{
+        fill: #fdf8eb;
+        stroke: #8c6d53;
+        stroke-width: 2;
+        fill-opacity: 0.9;
+      }}
+      .text-main {{
+        font-family: 'Press Start 2P', 'DotGothic16', monospace;
+        font-size: 11px;
+        fill: #2b1d0c;
+        font-weight: bold;
+      }}
+      .text-sub {{
+        font-family: 'Press Start 2P', 'DotGothic16', monospace;
+        font-size: 10px;
+        fill: #5c4033;
+      }}
+      .bar-bg {{ fill: #d9c5a0; }}
+      .bar-hp {{ fill: #c62828; }}
+      .bar-mp {{ fill: #1565c0; }}
+      .status-badge {{
+        font-family: 'Press Start 2P', 'DotGothic16', monospace;
+        font-size: 9px;
+        fill: #8c4a00;
+      }}
+
+      /* --- ダークモード (古びた暗黒魔法書風の質感) --- */
+      @media (prefers-color-scheme: dark) {{
+        .bg-parchment {{
+          fill: #1a1625;
+        }}
+        .window-border {{
+          fill: #2a2438;
+          stroke: #8b72be;
+          stroke-width: 4;
+        }}
+        .panel {{
+          fill: #13101c;
+          stroke: #5c4680;
+          stroke-width: 2;
+          fill-opacity: 0.85;
+        }}
+        .text-main {{
+          fill: #00ffcc;
+          text-shadow: 0 0 2px #00ffcc;
+        }}
+        .text-sub {{
+          fill: #bda6ff;
+        }}
+        .bar-bg {{ fill: #2c253b; }}
+        .bar-hp {{ fill: #ff4545; }}
+        .bar-mp {{ fill: #3892ff; }}
+        .status-badge {{
+          fill: #ffb703;
+          text-shadow: 0 0 2px #ffb703;
+        }}
+      }}
+    </style>
+
+    <!-- 羊皮紙風テクスチャフィルター -->
+    <filter id="paper-texture" x="0%" y="0%" width="100%" height="100%">
+      <!-- ノイズの生成 -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise" />
+      <!-- 色の混ざり具合を微調整 -->
+      <feDiffuseLighting in="noise" lighting-color="#fff8e7" surfaceScale="2" result="light">
+        <feDistantLight azimuth="60" elevation="50" />
+      </feDiffuseLighting>
+      <feBlend mode="multiply" in="SourceGraphic" in2="light" result="blend" />
+    </filter>
+  </defs>
+
+  <!-- Outer Window with Texture -->
+  <rect class="window-border" x="4" y="4" width="512" height="312" rx="8" />
+  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="6" />
 
   <!-- Header -->
   <rect class="panel" x="16" y="16" width="488" height="40" rx="4" />
-  <text class="text-main" x="28" y="41">LV:{data['lv']:02d}  {user_info['login'][:14].upper()}</text>
-  <text class="text-main" x="320" y="41">JOB:{data['job']}</text>
+  <text class="text-main" x="28" y="40">LV:{data['lv']:02d} {user_info['login'][:12].upper()}</text>
+  <text class="text-main" x="310" y="40">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars -->
   <rect class="panel" x="16" y="64" width="488" height="112" rx="4" />
@@ -269,19 +339,19 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   </g>
 
   <!-- HP Bar -->
-  <text class="text-main" x="132" y="92">HP</text>
-  <rect class="bar-bg" x="160" y="80" width="200" height="14" rx="2" />
-  <rect class="bar-hp" x="160" y="80" width="{int(200 * data['hp_pct'] / 100)}" height="14" rx="2" />
-  <text class="text-sub" x="370" y="92">{data['hp_pct']}%</text>
+  <text class="text-main" x="132" y="93">HP</text>
+  <rect class="bar-bg" x="160" y="82" width="200" height="12" rx="2" />
+  <rect class="bar-hp" x="160" y="82" width="{int(200 * data['hp_pct'] / 100)}" height="12" rx="2" />
+  <text class="text-sub" x="370" y="93">{data['hp_pct']}%</text>
 
   <!-- MP Bar -->
-  <text class="text-main" x="132" y="122">MP</text>
-  <rect class="bar-bg" x="160" y="110" width="200" height="14" rx="2" />
-  <rect class="bar-mp" x="160" y="110" width="{int(200 * data['mp_pct'] / 100)}" height="14" rx="2" />
-  <text class="text-sub" x="370" y="122">{data['mp_pct']}%</text>
+  <text class="text-main" x="132" y="121">MP</text>
+  <rect class="bar-bg" x="160" y="110" width="200" height="12" rx="2" />
+  <rect class="bar-mp" x="160" y="110" width="{int(200 * data['mp_pct'] / 100)}" height="12" rx="2" />
+  <text class="text-sub" x="370" y="121">{data['mp_pct']}%</text>
 
   <!-- Status Effects -->
-  <text class="status-badge" x="132" y="155">STATE: {status_str}</text>
+  <text class="status-badge" x="132" y="153">STATE: {status_str}</text>
 
   <!-- Bottom Panel Left: Stats -->
   <rect class="panel" x="16" y="184" width="236" height="120" rx="4" />
@@ -295,9 +365,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   <!-- Bottom Panel Right: Equipments -->
   <rect class="panel" x="268" y="184" width="236" height="120" rx="4" />
   <text class="text-main" x="280" y="206">-- EQUIP --</text>
-  <text class="text-sub" x="280" y="232">M-WPN : {data['main_weapon'][:12]}</text>
-  <text class="text-sub" x="280" y="258">S-WPN : {sub_weapon[:12]}</text>
-  <text class="text-sub" x="280" y="284">ACC   : {accessory[:12]}</text>
+  <text class="text-sub" x="280" y="232">M-WPN : {data['main_weapon'][:10]}</text>
+  <text class="text-sub" x="280" y="258">S-WPN : {sub_weapon[:10]}</text>
+  <text class="text-sub" x="280" y="284">ACC   : {accessory[:10]}</text>
 </svg>"""
     return svg
 
