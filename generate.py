@@ -92,7 +92,7 @@ def determine_job(main_lang):
     return "冒険者"
 
 def calculate_status(data):
-    # Lv: アカウント作成年数
+    # Lv: アカウント作成年数（1スタート）
     created_year = int(data['createdAt'][:4])
     current_year = datetime.datetime.now().year
     lv = max(1, current_year - created_year)
@@ -129,15 +129,18 @@ def calculate_status(data):
     int_stat = data['contributionsCollection']['totalRepositoryContributions']
     luk_stat = total_stars
 
-    # 簡易HP/MP（今週コミット数/最大コミット数）
-    hp_pct = min(100, int((this_week_commits / max_week_commits) * 100))
-    # MPはダミー的にPR数から算出（なければHPと同等）
-    mp_pct = min(100, int((str_stat % 10 + 1) * 10))
+    # 今週の数値と過去4週最大値（HP / MP）
+    hp_cur = this_week_commits
+    hp_max = max_week_commits
+    
+    # MPはPRの実績から計算（今週PR数と最大値）
+    # ダミー的上限補正
+    mp_cur = min(str_stat, 99)
+    mp_max = max(str_stat, 10)
 
     # 状態異常の判定
     status_effects = []
     
-    # 連続アクティブ日数
     active_days_streak = 0
     for d in reversed(days):
         if d['contributionCount'] > 0:
@@ -145,10 +148,9 @@ def calculate_status(data):
         else:
             break
             
-    # 平日 vs 休日コミット比較
     weekday_commits = 0
     weekend_commits = 0
-    for d in days[-30:]: # 直近30日
+    for d in days[-30:]:
         dt = datetime.datetime.strptime(d['date'], '%Y-%m-%d')
         if dt.weekday() >= 5:
             weekend_commits += d['contributionCount']
@@ -164,7 +166,6 @@ def calculate_status(data):
     if agi_stat > 50 and str_stat == 0:
         status_effects.append("Ghost")
 
-    # 非アクティブチェック
     inactive_days = 0
     for d in reversed(days):
         if d['contributionCount'] == 0:
@@ -182,8 +183,10 @@ def calculate_status(data):
     return {
         'lv': lv,
         'job': determine_job(main_lang),
-        'hp_pct': hp_pct,
-        'mp_pct': mp_pct,
+        'hp_cur': hp_cur,
+        'hp_max': hp_max,
+        'mp_cur': mp_cur,
+        'mp_max': mp_max,
         'str': str_stat,
         'agi': agi_stat,
         'int': int_stat,
@@ -194,7 +197,7 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 3. Avatar Pixel Art Generator (Edge Enhance + Dither + Rect)
+# 3. Avatar Pixel Art Generator (Smooth Pixelated Art)
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=32):
     try:
@@ -204,17 +207,14 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
         
         img = Image.open(BytesIO(img_data)).convert('RGB')
         
-        # 1. リサイズ（小さく）
-        img_small = img.resize((size, size), Image.Resampling.BILINEAR)
-        
-        # 2. 減色 & ディザリング (Web安全色216色へ減色)
-        img_pixel = img_small.quantize(colors=16, method=Image.Quantize.MEDIANCUT).convert('RGB')
+        # ディザリングによるジャギ・格子線感を排除し、滑らかなドット絵にする調整
+        img_small = img.resize((size, size), Image.Resampling.LANCZOS)
         
         rects_svg = []
-        scale = 3  # 1ピクセルを3x3pxのSVG Rectとして出力
+        scale = 3  # 32x32 -> 96x96
         for y in range(size):
             for x in range(size):
-                r, g, b = img_pixel.getpixel((x, y))
+                r, g, b = img_small.getpixel((x, y))
                 color_hex = f"#{r:02x}{g:02x}{b:02x}"
                 rects_svg.append(f'<rect x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" fill="{color_hex}" />')
         
@@ -224,150 +224,164 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
         return '<rect x="0" y="0" width="96" height="96" fill="#555" />'
 
 # -----------------------------------------------------------------------------
-# 4. SVG Renderer (Light/Dark Mode Support)
+# 4. SVG Renderer (Textured & Formatted)
 # -----------------------------------------------------------------------------
 def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[Normal]"
     
+    # HP/MP割合計算
+    hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
+    mp_pct = min(1.0, data['mp_cur'] / max(1, data['mp_max']))
+    
+    # ユーザー名はそのままケースを維持
+    username = user_info['login']
+
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
-    <!-- ドットフォントのインポート -->
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=DotGothic16&amp;family=Press+Start+2P&amp;display=swap');
-
-      /* 基本のフォント設定 */
+      /* GitHubで崩れないWeb標準レトロフォント構成 */
       .font-pixel {{
-        font-family: 'Press Start 2P', 'DotGothic16', monospace;
+        font-family: 'Courier New', Courier, 'MS Gothic', 'Yu Gothic', monospace;
+        letter-spacing: 0.5px;
       }}
 
-      /* --- ライトモード (明るい羊皮紙風) --- */
-      .bg-parchment {{
-        fill: #f5ea38; /* ベースカラー */
-        filter: url(#paper-texture);
-      }}
-      .window-border {{
-        fill: #e0cca0;
-        stroke: #5c4033;
+      /* --- ライトモード (羊皮紙・レトロゲームUI) --- */
+      .bg-outer {{
+        fill: #d8c29d;
+        stroke: #4a3525;
         stroke-width: 4;
       }}
+      .bg-parchment {{
+        fill: #f2e3c6;
+        filter: url(#paper-texture);
+      }}
       .panel {{
-        fill: #fdf8eb;
-        stroke: #8c6d53;
+        fill: #edd2a8;
+        stroke: #735338;
         stroke-width: 2;
-        fill-opacity: 0.9;
+        filter: url(#paper-texture);
+      }}
+      .panel-inner {{
+        fill: #fdf6e7;
+        stroke: #bfa17c;
+        stroke-width: 1;
       }}
       .text-main {{
-        font-family: 'Press Start 2P', 'DotGothic16', monospace;
-        font-size: 11px;
-        fill: #2b1d0c;
+        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-size: 13px;
         font-weight: bold;
+        fill: #2b1d0c;
       }}
       .text-sub {{
-        font-family: 'Press Start 2P', 'DotGothic16', monospace;
-        font-size: 10px;
+        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-size: 11px;
+        font-weight: bold;
         fill: #5c4033;
       }}
-      .bar-bg {{ fill: #d9c5a0; }}
-      .bar-hp {{ fill: #c62828; }}
-      .bar-mp {{ fill: #1565c0; }}
+      .bar-bg {{ fill: #c7b08b; stroke: #8c6d53; stroke-width: 1; }}
+      .bar-hp {{ fill: #d32f2f; }}
+      .bar-mp {{ fill: #1976d2; }}
       .status-badge {{
-        font-family: 'Press Start 2P', 'DotGothic16', monospace;
-        font-size: 9px;
+        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-size: 11px;
+        font-weight: bold;
         fill: #8c4a00;
       }}
 
-      /* --- ダークモード (古びた暗黒魔法書風の質感) --- */
+      /* --- ダークモード (妖しい古文書・魔導書UI) --- */
       @media (prefers-color-scheme: dark) {{
-        .bg-parchment {{
-          fill: #1a1625;
+        .bg-outer {{
+          fill: #15121e;
+          stroke: #6b529c;
         }}
-        .window-border {{
-          fill: #2a2438;
-          stroke: #8b72be;
-          stroke-width: 4;
+        .bg-parchment {{
+          fill: #1f1a2e;
         }}
         .panel {{
-          fill: #13101c;
-          stroke: #5c4680;
-          stroke-width: 2;
-          fill-opacity: 0.85;
+          fill: #29223d;
+          stroke: #513e78;
+        }}
+        .panel-inner {{
+          fill: #14111f;
+          stroke: #3d305c;
         }}
         .text-main {{
           fill: #00ffcc;
-          text-shadow: 0 0 2px #00ffcc;
+          text-shadow: 0 0 1px #00ffcc;
         }}
         .text-sub {{
-          fill: #bda6ff;
+          fill: #cbb8ff;
         }}
-        .bar-bg {{ fill: #2c253b; }}
+        .bar-bg {{ fill: #1a1528; stroke: #453566; }}
         .bar-hp {{ fill: #ff4545; }}
         .bar-mp {{ fill: #3892ff; }}
         .status-badge {{
           fill: #ffb703;
-          text-shadow: 0 0 2px #ffb703;
         }}
       }}
     </style>
 
-    <!-- 羊皮紙風テクスチャフィルター -->
+    <!-- ノイズテクスチャフィルター -->
     <filter id="paper-texture" x="0%" y="0%" width="100%" height="100%">
-      <!-- ノイズの生成 -->
-      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise" />
-      <!-- 色の混ざり具合を微調整 -->
-      <feDiffuseLighting in="noise" lighting-color="#fff8e7" surfaceScale="2" result="light">
-        <feDistantLight azimuth="60" elevation="50" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="4" result="noise" />
+      <feDiffuseLighting in="noise" lighting-color="#ffffff" surfaceScale="1.5" result="light">
+        <feDistantLight azimuth="45" elevation="60" />
       </feDiffuseLighting>
       <feBlend mode="multiply" in="SourceGraphic" in2="light" result="blend" />
     </filter>
   </defs>
 
-  <!-- Outer Window with Texture -->
-  <rect class="window-border" x="4" y="4" width="512" height="312" rx="8" />
-  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="6" />
+  <!-- Base Outer Frame -->
+  <rect class="bg-outer" x="4" y="4" width="512" height="312" rx="6" />
+  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="4" />
 
-  <!-- Header -->
-  <rect class="panel" x="16" y="16" width="488" height="40" rx="4" />
-  <text class="text-main" x="28" y="40">LV:{data['lv']:02d} {user_info['login'][:12].upper()}</text>
-  <text class="text-main" x="310" y="40">JOB:{data['job']}</text>
+  <!-- Header Panel -->
+  <rect class="panel" x="16" y="16" width="488" height="40" rx="3" />
+  <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="2" />
+  <text class="text-main" x="32" y="41">Lv.{data['lv']} {username}</text>
+  <text class="text-main" x="320" y="41">JOB:{data['job']}</text>
 
-  <!-- Avatar & Bars -->
-  <rect class="panel" x="16" y="64" width="488" height="112" rx="4" />
+  <!-- Avatar & Bars Panel -->
+  <rect class="panel" x="16" y="64" width="488" height="112" rx="3" />
+  <rect class="panel-inner" x="20" y="68" width="480" height="104" rx="2" />
   
-  <!-- Pixel Avatar (96x96) -->
-  <g transform="translate(24, 72)">
+  <!-- Smooth Pixel Avatar (96x96) -->
+  <g transform="translate(26, 72)">
     {avatar_rects}
   </g>
 
   <!-- HP Bar -->
-  <text class="text-main" x="132" y="93">HP</text>
-  <rect class="bar-bg" x="160" y="82" width="200" height="12" rx="2" />
-  <rect class="bar-hp" x="160" y="82" width="{int(200 * data['hp_pct'] / 100)}" height="12" rx="2" />
-  <text class="text-sub" x="370" y="93">{data['hp_pct']}%</text>
+  <text class="text-main" x="134" y="94">HP</text>
+  <rect class="bar-bg" x="162" y="83" width="180" height="13" rx="2" />
+  <rect class="bar-hp" x="162" y="83" width="{int(180 * hp_pct)}" height="13" rx="2" />
+  <text class="text-sub" x="350" y="94">{data['hp_cur']}/{data['hp_max']}</text>
 
   <!-- MP Bar -->
-  <text class="text-main" x="132" y="121">MP</text>
-  <rect class="bar-bg" x="160" y="110" width="200" height="12" rx="2" />
-  <rect class="bar-mp" x="160" y="110" width="{int(200 * data['mp_pct'] / 100)}" height="12" rx="2" />
-  <text class="text-sub" x="370" y="121">{data['mp_pct']}%</text>
+  <text class="text-main" x="134" y="122">MP</text>
+  <rect class="bar-bg" x="162" y="111" width="180" height="13" rx="2" />
+  <rect class="bar-mp" x="162" y="111" width="{int(180 * mp_pct)}" height="13" rx="2" />
+  <text class="text-sub" x="350" y="122">{data['mp_cur']}/{data['mp_max']}</text>
 
   <!-- Status Effects -->
-  <text class="status-badge" x="132" y="153">STATE: {status_str}</text>
+  <text class="status-badge" x="134" y="154">STATE: {status_str}</text>
 
-  <!-- Bottom Panel Left: Stats -->
-  <rect class="panel" x="16" y="184" width="236" height="120" rx="4" />
-  <text class="text-main" x="28" y="206">-- STATS --</text>
+  <!-- Bottom Left Panel: Stats -->
+  <rect class="panel" x="16" y="184" width="236" height="120" rx="3" />
+  <rect class="panel-inner" x="20" y="188" width="228" height="112" rx="2" />
+  <text class="text-main" x="28" y="208">-- STATS --</text>
   <text class="text-sub" x="28" y="228">STR(PR)  : {data['str']}</text>
   <text class="text-sub" x="28" y="246">AGI(CMT) : {data['agi']}</text>
   <text class="text-sub" x="28" y="264">INT(REP) : {data['int']}</text>
   <text class="text-sub" x="28" y="282">DEX(LNG) : {data['dex']}</text>
-  <text class="text-sub" x="28" y="300">LUK(STR) : {data['luk']}</text>
+  <text class="text-sub" x="30" y="300">LUK(STR) : {data['luk']}</text>
 
-  <!-- Bottom Panel Right: Equipments -->
-  <rect class="panel" x="268" y="184" width="236" height="120" rx="4" />
-  <text class="text-main" x="280" y="206">-- EQUIP --</text>
-  <text class="text-sub" x="280" y="232">M-WPN : {data['main_weapon'][:10]}</text>
-  <text class="text-sub" x="280" y="258">S-WPN : {sub_weapon[:10]}</text>
-  <text class="text-sub" x="280" y="284">ACC   : {accessory[:10]}</text>
+  <!-- Bottom Right Panel: Equipments -->
+  <rect class="panel" x="268" y="184" width="236" height="120" rx="3" />
+  <rect class="panel-inner" x="272" y="188" width="228" height="112" rx="2" />
+  <text class="text-main" x="280" y="208">-- EQUIP --</text>
+  <text class="text-sub" x="280" y="232">M-WPN : {data['main_weapon'][:11]}</text>
+  <text class="text-sub" x="280" y="258">S-WPN : {sub_weapon[:11]}</text>
+  <text class="text-sub" x="280" y="284">ACC   : {accessory[:11]}</text>
 </svg>"""
     return svg
 
@@ -383,25 +397,20 @@ if __name__ == "__main__":
     parser.add_argument('--output', default="status.svg")
     args = parser.parse_args()
 
-    # シード値の固定: [ユーザーID + YYYY-MM-DD]
     today_str = datetime.datetime.now().strftime('%Y-%m-%d')
     seed_str = f"{args.username}_{today_str}"
     random.seed(seed_str)
 
-    # データ取得＆計算
     raw_data = fetch_github_data(args.token, args.username)
     status_data = calculate_status(raw_data)
 
-    # ランダム装備の抽選
     sub_list = [s.strip() for s in args.sub_weapons.split(',')]
     acc_list = [a.strip() for a in args.accessories.split(',')]
     chosen_sub = random.choice(sub_list)
     chosen_acc = random.choice(acc_list)
 
-    # アバターのドット絵化
     avatar_rects = generate_pixel_avatar_rects(raw_data['avatarUrl'])
 
-    # SVGのビルド＆出力
     svg_content = build_svg(status_data, raw_data, avatar_rects, chosen_sub, chosen_acc)
 
     with open(args.output, 'w', encoding='utf-8') as f:
