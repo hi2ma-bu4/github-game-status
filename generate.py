@@ -219,16 +219,14 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 4. Pixel Art Helpers (Panels, Gold Corners, Icons, Truncate)
+# 4. Pixel Art Helpers
 # -----------------------------------------------------------------------------
 def truncate_text(text, max_len=13):
-    """文字列長超過時に '...' を付与する"""
     if len(text) > max_len:
         return text[:max_len-2] + ".."
     return text
 
 def make_pixel_panel(x, y, w, h, corner=4):
-    """ギザギザ丸角パス生成"""
     c = corner
     return (
         f"M {x+c} {y} "
@@ -239,10 +237,8 @@ def make_pixel_panel(x, y, w, h, corner=4):
     )
 
 def make_gold_corners(x, y, w, h):
-    """枠線の四隅に配置する金色のL字ピクセル装飾"""
     s = 2
     l = 8
-    # Top-Left, Top-Right, Bottom-Left, Bottom-Right
     return f"""
     <path class="gold-decor" d="M {x+2} {y+2} h {l} v {s} h {-l+s} v {l-s} h {-s} Z" />
     <path class="gold-decor" d="M {x+w-2} {y+2} h {-l} v {s} h {l-s} v {l-s} h {s} Z" />
@@ -250,7 +246,6 @@ def make_gold_corners(x, y, w, h):
     <path class="gold-decor" d="M {x+w-2} {y+h-2} h {-l} v {-s} h {l-s} v {-l+s} h {s} Z" />
     """
 
-# --- ドット絵アイコン定義 ---
 PIXEL_HEART_SVG = """
 <g transform="translate(0, 0)">
   <path fill="#e53935" d="M2,1 h2 v1 h-2 Z M6,1 h2 v1 h-2 Z M1,2 h4 v1 h-4 Z M5,2 h4 v1 h-4 Z M1,3 h8 v1 h-8 Z M2,4 h6 v1 h-6 Z M3,5 h4 v1 h-4 Z M4,6 h2 v1 h-2 Z" />
@@ -266,7 +261,6 @@ PIXEL_POTION_SVG = """
 """
 
 def get_status_icon(effect):
-    """ステータス状態に応じたミニドットアイコン"""
     if effect == "BURNING":
         return '<path fill="#ff7043" d="M3,0 h2 v1 h-2 Z M2,1 h4 v1 h-4 Z M1,2 h6 v1 h-6 Z M0,3 h8 v3 h-8 Z M1,6 h6 v1 h-6 Z M2,7 h4 v1 h-4 Z"/>'
     elif effect == "FROZEN":
@@ -277,11 +271,11 @@ def get_status_icon(effect):
         return '<path fill="#ffee58" d="M2,0 h4 v2 h-4 Z M0,2 h8 v4 h-8 Z M2,6 h4 v2 h-4 Z"/>'
     elif effect == "GHOST":
         return '<path fill="#b0bec5" d="M2,0 h4 v1 h-4 Z M1,1 h6 v5 h-6 Z M1,6 h2 v2 h-2 Z M5,6 h2 v2 h-2 Z"/>'
-    else: # NORMAL
+    else:
         return '<path fill="#66bb6a" d="M3,0 h2 v2 h-2 Z M0,3 h8 v2 h-8 Z M3,6 h2 v2 h-2 Z"/>'
 
 # -----------------------------------------------------------------------------
-# 5. Avatar Pixel Art Generator (額縁フレーム付き)
+# 5. Avatar Pixel Art Generator (アバターに完全に沿ったドット銀縁)
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=16):
     try:
@@ -294,14 +288,9 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
         img_16colors = img_small.quantize(colors=16).convert('RGB')
         
         rects_svg = []
-        scale = 5  # 80x80pxサイズに収まるよう調整
+        scale = 5  # 16*5 = 80px
         
-        # 1. アバター背景（ギザギザ額縁）
-        frame_path = make_pixel_panel(-6, -6, size*scale + 12, size*scale + 12, corner=4)
-        rects_svg.append(f'<path fill="#3a2717" stroke="#8c6d53" stroke-width="2" d="{frame_path}" />')
-        rects_svg.append(f'<rect x="-2" y="-2" width="{size*scale+4}" height="{size*scale+4}" fill="#1a1008" />')
-
-        # 2. ドット絵ピクセル出力
+        # 1. アバター画像（80x80px）
         for y in range(size):
             for x in range(size):
                 r, g, b = img_16colors.getpixel((x, y))
@@ -312,7 +301,18 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
                     f'<rect class="px-dot" x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" '
                     f'fill="{color_hex}" style="animation-delay: {delay}s;" />'
                 )
-        return "".join(rects_svg)
+        
+        # 2. アイコンの周囲にぴったり重ねるドット銀縁（丸角の角が少し重なるジャストサイズ）
+        silver_frame_path = make_pixel_panel(-2, -2, size*scale + 4, size*scale + 4, corner=3)
+        silver_inner_path = make_pixel_panel(0, 0, size*scale, size*scale, corner=2)
+        
+        frame_svg = f'''
+        <path fill="#e0e0e0" stroke="#808080" stroke-width="1.5" d="{silver_frame_path}" />
+        <path fill="none" stroke="#ffffff" stroke-width="1" d="{silver_inner_path}" opacity="0.6" />
+        '''
+        
+        # 銀縁をベースの上に重ねる
+        return "".join(rects_svg) + frame_svg
     except Exception as e:
         print(f"Failed to process avatar: {e}")
         return '<rect x="0" y="0" width="80" height="80" fill="#555" />'
@@ -321,7 +321,6 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
 # 6. SVG Renderer & Automated Font Embedding
 # -----------------------------------------------------------------------------
 def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
-    # ステータス効果テキスト & アイコン構築
     first_effect = data['status_effects'][0] if data['status_effects'] else "NORMAL"
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[NORMAL]"
     status_icon_svg = get_status_icon(first_effect)
@@ -329,9 +328,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
     mp_pct = min(1.0, data['mp_cur'] / max(1, data['mp_max']))
     
-    username = user_info['name'] if user_info.get('name') else user_info['login']
+    display_name = user_info['name'] if user_info.get('name') else user_info['login']
+    login_id = user_info['login']
 
-    # ギザギザピクセル枠線のパス生成
     p_header_out = make_pixel_panel(16, 16, 488, 40, 4)
     p_header_in  = make_pixel_panel(20, 20, 480, 32, 2)
 
@@ -344,27 +343,28 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     p_btm_r_out  = make_pixel_panel(268, 180, 236, 124, 4)
     p_btm_r_in   = make_pixel_panel(272, 184, 228, 116, 2)
 
-    # L字金色コーナー装飾
     gold_h   = make_gold_corners(20, 20, 480, 32)
     gold_m   = make_gold_corners(20, 66, 480, 104)
     gold_bl  = make_gold_corners(20, 184, 228, 116)
     gold_br  = make_gold_corners(272, 184, 228, 116)
 
-    # 省略文字処理 (truncate_text)
     m_wpn_str = truncate_text(data['main_weapon'], 13)
     s_wpn_str = truncate_text(sub_weapon, 13)
     acc_str   = truncate_text(accessory, 13)
 
+    # ステータス別オーラCSSクラス
+    status_aura_class = f"aura-{first_effect.lower()}"
+
     raw_svg_text = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
-    <!-- レトロ羊皮紙・ディスプレイ風ノイズフィルター -->
+    <!-- ノイズフィルター -->
     <filter id="bg-noise" x="0%" y="0%" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" result="noise" />
       <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.07 0" />
       <feComposite operator="in" in2="SourceGraphic" />
     </filter>
 
-    <!-- UIグラデーションパネル -->
+    <!-- UIパネルグラデーション -->
     <linearGradient id="panel-grad" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#3d2d1d" />
       <stop offset="100%" stop-color="#241a10" />
@@ -375,31 +375,72 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       <stop offset="100%" stop-color="#120e1c" />
     </linearGradient>
 
+    <!-- HP/MP ゆらめきアニメーション用グラデーション -->
+    <linearGradient id="hp-wave-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#d32f2f" />
+      <stop offset="30%" stop-color="#ff6666" />
+      <stop offset="60%" stop-color="#d32f2f" />
+      <stop offset="100%" stop-color="#9a0007" />
+    </linearGradient>
+
+    <linearGradient id="mp-wave-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1976d2" />
+      <stop offset="30%" stop-color="#64b5f6" />
+      <stop offset="60%" stop-color="#1976d2" />
+      <stop offset="100%" stop-color="#004ba0" />
+    </linearGradient>
+
     <style>
       /*FONT_PLACEHOLDER*/
 
-      /* カラー設定 */
       .txt-main {{ fill: #f2e3c6; }}
       .txt-sub  {{ fill: #d8c29d; }}
+      .txt-id   {{ fill: #bfa882; font-size: 10px; }}
       .txt-badge {{ fill: #ffb040; }}
 
       .bg-outer {{ fill: #4a3525; stroke: #2b1d0c; stroke-width: 2; }}
       .bg-parchment {{ fill: #d8c29d; }}
       .bg-noise-layer {{ fill: #000000; filter: url(#bg-noise); }}
 
-      /* ピクセル枠線＆パネル */
       .panel-outer {{ fill: #8c6d53; }}
       .panel-inner {{ fill: url(#panel-grad); }}
       .gold-decor  {{ fill: #f5d061; }}
       
       .bar-bg {{ fill: #140d07; stroke: #5c4533; stroke-width: 1; }}
-      .bar-hp {{ fill: #d32f2f; }}
-      .bar-mp {{ fill: #1976d2; }}
+      
+      /* HP/MPゲージの流動アニメーション */
+      @keyframes bar-wave {{
+        0% {{ x: 0px; }}
+        100% {{ x: -50px; }}
+      }}
+      
+      .bar-hp {{
+        fill: url(#hp-wave-grad);
+      }}
+      .bar-mp {{
+        fill: url(#mp-wave-grad);
+      }}
+
+      /* ステータス別オーラ演出 */
+      @keyframes aura-burn-pulse {{
+        0% {{ stroke: #ff3300; filter: drop-shadow(0 0 2px #ff3300); }}
+        50% {{ stroke: #ff9900; filter: drop-shadow(0 0 6px #ff9900); }}
+        100% {{ stroke: #ff3300; filter: drop-shadow(0 0 2px #ff3300); }}
+      }}
+      @keyframes aura-freeze-pulse {{
+        0% {{ stroke: #00d2ff; filter: drop-shadow(0 0 2px #00d2ff); }}
+        50% {{ stroke: #80e5ff; filter: drop-shadow(0 0 6px #80e5ff); }}
+        100% {{ stroke: #00d2ff; filter: drop-shadow(0 0 2px #00d2ff); }}
+      }}
+      
+      .aura-burning {{ animation: aura-burn-pulse 1.5s infinite alternate; stroke-width: 2px !important; }}
+      .aura-frozen  {{ animation: aura-freeze-pulse 2s infinite alternate; stroke-width: 2px !important; }}
 
       /* ダークモード対応 */
       @media (prefers-color-scheme: dark) {{
         .txt-main {{ fill: #e0d0f0; }}
         .txt-sub  {{ fill: #b8a0d0; }}
+        .txt-id   {{ fill: #8a70a0; }}
         .txt-badge {{ fill: #ffcc00; }}
         
         .bg-outer {{ fill: #100d17; stroke: #3d305c; }}
@@ -410,11 +451,8 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
         .gold-decor  {{ fill: #ffb040; }}
         
         .bar-bg {{ fill: #0a0810; stroke: #3d305c; }}
-        .bar-hp {{ fill: #ff4545; }}
-        .bar-mp {{ fill: #3892ff; }}
       }}
 
-      /* アニメーション */
       @keyframes dot-flash-sharp {{
         0% {{ filter: brightness(1); }}
         10% {{ filter: brightness(2.8); }}
@@ -427,24 +465,24 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     </style>
   </defs>
 
-  <!-- Frame & Noise Background -->
+  <!-- Background -->
   <rect class="bg-outer" x="4" y="4" width="512" height="312" />
   <rect class="bg-parchment" x="8" y="8" width="504" height="304" />
   <rect class="bg-noise-layer" x="8" y="8" width="504" height="304" />
 
   <!-- Header -->
-  <path class="panel-outer" d="{p_header_out}" />
+  <path class="panel-outer {status_aura_class}" d="{p_header_out}" />
   <path class="panel-inner" d="{p_header_in}" />
   {gold_h}
-  <text class="pixel-text txt-main" x="30" y="41">Lv.{data['lv']} {username}</text>
-  <text class="pixel-text txt-main" x="330" y="41">JOB:{data['job']}</text>
+  <text class="pixel-text txt-main" x="30" y="41">Lv.{data['lv']} {display_name} <tspan class="txt-id">({login_id})</tspan></text>
+  <text class="pixel-text txt-main" x="350" y="41">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars -->
-  <path class="panel-outer" d="{p_mid_out}" />
+  <path class="panel-outer {status_aura_class}" d="{p_mid_out}" />
   <path class="panel-inner" d="{p_mid_in}" />
   {gold_m}
   
-  <!-- Avatar Frame -->
+  <!-- Avatar (銀縁がアバターにジャストフィット) -->
   <g transform="translate(32, 78)">
     {avatar_rects}
   </g>
@@ -455,7 +493,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   </g>
   <text class="pixel-text txt-main" x="146" y="91">HP</text>
   <rect class="bar-bg" x="170" y="81" width="172" height="12" />
-  <rect class="bar-hp" x="170" y="81" width="{int(172 * hp_pct)}" height="12" />
+  <svg x="170" y="81" width="172" height="12">
+    <rect class="bar-hp" x="0" y="0" width="{int(172 * hp_pct)}" height="12" />
+  </svg>
   <text class="pixel-text txt-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
 
   <!-- MP Bar + Potion Icon -->
@@ -464,7 +504,9 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   </g>
   <text class="pixel-text txt-main" x="146" y="117">MP</text>
   <rect class="bar-bg" x="170" y="107" width="172" height="12" />
-  <rect class="bar-mp" x="170" y="107" width="{int(172 * mp_pct)}" height="12" />
+  <svg x="170" y="107" width="172" height="12">
+    <rect class="bar-mp" x="0" y="0" width="{int(172 * mp_pct)}" height="12" />
+  </svg>
   <text class="pixel-text txt-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
   <!-- Status + Status Effect Icon -->
@@ -475,8 +517,8 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   </g>
   <text class="pixel-text txt-badge" x="146" y="150">STATE: {status_str}</text>
 
-  <!-- Bottom Left: Stats (コロン整列: x=102) -->
-  <path class="panel-outer" d="{p_btm_l_out}" />
+  <!-- Bottom Left: Stats -->
+  <path class="panel-outer {status_aura_class}" d="{p_btm_l_out}" />
   <path class="panel-inner" d="{p_btm_l_in}" />
   {gold_bl}
   <text class="pixel-text txt-main" x="30" y="204">-- STATS --</text>
@@ -486,8 +528,8 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-sub" x="30" y="269">DEX(LNG)</text> <text class="pixel-text txt-sub" x="102" y="269">: {data['dex']}</text>
   <text class="pixel-text txt-sub" x="30" y="284">LUK(STR)</text> <text class="pixel-text txt-sub" x="102" y="284">: {data['luk']}</text>
 
-  <!-- Bottom Right: Equipments (コロン整列: x=338, 省略対応済み) -->
-  <path class="panel-outer" d="{p_btm_r_out}" />
+  <!-- Bottom Right: Equipments -->
+  <path class="panel-outer {status_aura_class}" d="{p_btm_r_out}" />
   <path class="panel-inner" d="{p_btm_r_in}" />
   {gold_br}
   <text class="pixel-text txt-main" x="282" y="204">-- EQUIP --</text>
@@ -496,7 +538,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-sub" x="282" y="272">ACC</text>   <text class="pixel-text txt-sub" x="338" y="272">: {acc_str}</text>
 </svg>"""
 
-    # --- フォント自動抽出処理 (SVG内の全<text>タグから自動抽出) ---
+    # --- フォント自動抽出処理 ---
     extracted_text_nodes = re.findall(r'<text[^>]*>(.*?)</text>', raw_svg_text, re.DOTALL)
     extracted_all_characters = "".join(extracted_text_nodes)
 
@@ -559,4 +601,4 @@ if __name__ == "__main__":
     with open(args.output, 'w', encoding='utf-8') as f:
         f.write(svg_content)
 
-    print(f"Successfully generated {args.output} with retro RPG enhancements!")
+    print(f"Successfully generated {args.output} with animated bars and status auras!")
