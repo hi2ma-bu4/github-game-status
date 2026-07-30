@@ -89,7 +89,6 @@ def subset_and_encode_font(font_path, text_to_embed):
         return None
 
     try:
-        # 重複文字の排除
         unique_text = "".join(set(text_to_embed))
 
         font = TTFont(font_path)
@@ -140,7 +139,7 @@ def calculate_status(data):
         for edge in repo['languages']['edges']:
             l_name = edge['node']['name']
             l_size = edge['size']
-            lang_sizes[l_name] = lang_sizes.get(l_name, 0) + l_size
+            lang_sizes[l_name] = lang_sizes.get(l_size, 0) + l_size
 
     sorted_langs = sorted(lang_sizes.items(), key=lambda x: x[1], reverse=True)
     main_lang = sorted_langs[0][0] if sorted_langs else "None"
@@ -224,7 +223,23 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 4. Avatar Pixel Art Generator
+# 4. Pixel Helpers (Pixelated Round Corner Path Generator)
+# -----------------------------------------------------------------------------
+def make_pixel_panel(x, y, w, h, corner=4):
+    """
+    丸角をドット調のギザギザ（階段状パス）で生成する関数
+    """
+    c = corner
+    return (
+        f"M {x+c} {y} "
+        f"H {x+w-c} V {y+c//2} H {x+w-c//2} V {y+c} H {x+w} "
+        f"V {y+h-c} H {x+w-c//2} V {y+h-c//2} H {x+w-c} V {y+h} "
+        f"H {x+c} V {y+h-c//2} H {x+c//2} V {y+h-c} H {x} "
+        f"V {y+c} H {x+c//2} V {y+c//2} H {x+c} Z"
+    )
+
+# -----------------------------------------------------------------------------
+# 5. Avatar Pixel Art Generator
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=16):
     try:
@@ -255,7 +270,7 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
         return '<rect x="0" y="0" width="96" height="96" fill="#555" />'
 
 # -----------------------------------------------------------------------------
-# 5. SVG Renderer & Automated Font Embedding
+# 6. SVG Renderer & Automated Font Embedding
 # -----------------------------------------------------------------------------
 def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[NORMAL]"
@@ -265,36 +280,56 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     
     username = user_info['name'] if user_info.get('name') else user_info['login']
 
-    # f-string で直接構築 (CSSのカッコは {{ }} でエスケープ)
+    # ギザギザピクセル枠線のパス生成
+    p_header_out = make_pixel_panel(16, 16, 488, 40, 4)
+    p_header_in  = make_pixel_panel(20, 20, 480, 32, 2)
+
+    p_mid_out    = make_pixel_panel(16, 62, 488, 112, 4)
+    p_mid_in     = make_pixel_panel(20, 66, 480, 104, 2)
+
+    p_btm_l_out  = make_pixel_panel(16, 180, 236, 124, 4)
+    p_btm_l_in   = make_pixel_panel(20, 184, 228, 116, 2)
+
+    p_btm_r_out  = make_pixel_panel(268, 180, 236, 124, 4)
+    p_btm_r_in   = make_pixel_panel(272, 184, 228, 116, 2)
+
     raw_svg_text = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
-    <!-- ドット調ピクセル背景パターン -->
-    <pattern id="pixel-grid" width="4" height="4" patternUnits="userSpaceOnUse">
-      <rect width="4" height="4" fill="#edd2a8" />
-      <rect width="2" height="2" fill="#e2c496" />
-      <rect x="2" y="2" width="2" height="2" fill="#e2c496" />
-    </pattern>
-    <pattern id="pixel-grid-dark" width="4" height="4" patternUnits="userSpaceOnUse">
-      <rect width="4" height="4" fill="#29223d" />
-      <rect width="2" height="2" fill="#201a30" />
-      <rect x="2" y="2" width="2" height="2" fill="#201a30" />
-    </pattern>
+    <!-- レトロ羊皮紙・ディスプレイ風ノイズフィルター (feTurbulence 復元) -->
+    <filter id="bg-noise" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" result="noise" />
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.07 0" />
+      <feComposite operator="in" in2="SourceGraphic" />
+    </filter>
+
+    <!-- レトロゲームUI パネル用グラデーション (市松模様廃止・深み復元) -->
+    <linearGradient id="panel-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3d2d1d" />
+      <stop offset="100%" stop-color="#241a10" />
+    </linearGradient>
+
+    <linearGradient id="panel-grad-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#201a2e" />
+      <stop offset="100%" stop-color="#120e1c" />
+    </linearGradient>
 
     <style>
       /*FONT_PLACEHOLDER*/
 
       /* カラー設定 */
-      .txt-main {{ fill: #2b1d0c; }}
-      .txt-sub  {{ fill: #4a3319; }}
-      .txt-badge {{ fill: #8c4a00; }}
+      .txt-main {{ fill: #f2e3c6; }}
+      .txt-sub  {{ fill: #d8c29d; }}
+      .txt-badge {{ fill: #ffb040; }}
 
-      .bg-outer {{ fill: #d8c29d; stroke: #4a3525; stroke-width: 4; }}
-      .bg-parchment {{ fill: #f2e3c6; }}
+      .bg-outer {{ fill: #4a3525; stroke: #2b1d0c; stroke-width: 2; }}
+      .bg-parchment {{ fill: #d8c29d; }}
+      .bg-noise-layer {{ fill: #000000; filter: url(#bg-noise); }}
+
+      /* ピクセル枠線＆グラデーション背景 */
+      .panel-outer {{ fill: #8c6d53; }}
+      .panel-inner {{ fill: url(#panel-grad); }}
       
-      /* ドット模様背景パネル */
-      .panel {{ fill: url(#pixel-grid); stroke: #735338; stroke-width: 2; }}
-      .panel-inner {{ fill: #fdf6e7; stroke: #bfa17c; stroke-width: 1; }}
-      .bar-bg {{ fill: #c7b08b; stroke: #8c6d53; stroke-width: 1; }}
+      .bar-bg {{ fill: #140d07; stroke: #5c4533; stroke-width: 1; }}
       .bar-hp {{ fill: #d32f2f; }}
       .bar-mp {{ fill: #1976d2; }}
 
@@ -302,12 +337,15 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
       @media (prefers-color-scheme: dark) {{
         .txt-main {{ fill: #e0d0f0; }}
         .txt-sub  {{ fill: #b8a0d0; }}
-        .txt-badge {{ fill: #ffb040; }}
-        .bg-outer {{ fill: #15121e; stroke: #6b529c; }}
-        .bg-parchment {{ fill: #1f1a2e; }}
-        .panel {{ fill: url(#pixel-grid-dark); stroke: #513e78; }}
-        .panel-inner {{ fill: #14111f; stroke: #3d305c; }}
-        .bar-bg {{ fill: #1a1528; stroke: #453566; }}
+        .txt-badge {{ fill: #ffcc00; }}
+        
+        .bg-outer {{ fill: #100d17; stroke: #3d305c; }}
+        .bg-parchment {{ fill: #1c1626; }}
+        
+        .panel-outer {{ fill: #513e78; }}
+        .panel-inner {{ fill: url(#panel-grad-dark); }}
+        
+        .bar-bg {{ fill: #0a0810; stroke: #3d305c; }}
         .bar-hp {{ fill: #ff4545; }}
         .bar-mp {{ fill: #3892ff; }}
       }}
@@ -325,19 +363,20 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
     </style>
   </defs>
 
-  <!-- Frame -->
-  <rect class="bg-outer" x="4" y="4" width="512" height="312" rx="4" />
-  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="2" />
+  <!-- Frame & Noise Background -->
+  <rect class="bg-outer" x="4" y="4" width="512" height="312" />
+  <rect class="bg-parchment" x="8" y="8" width="504" height="304" />
+  <rect class="bg-noise-layer" x="8" y="8" width="504" height="304" />
 
   <!-- Header -->
-  <rect class="panel" x="16" y="16" width="488" height="40" rx="2" />
-  <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="1" />
+  <path class="panel-outer" d="{p_header_out}" />
+  <path class="panel-inner" d="{p_header_in}" />
   <text class="pixel-text txt-main" x="30" y="41">Lv.{data['lv']} {username}</text>
   <text class="pixel-text txt-main" x="330" y="41">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars -->
-  <rect class="panel" x="16" y="62" width="488" height="112" rx="2" />
-  <rect class="panel-inner" x="20" y="66" width="480" height="104" rx="1" />
+  <path class="panel-outer" d="{p_mid_out}" />
+  <path class="panel-inner" d="{p_mid_in}" />
   
   <g transform="translate(26, 70)">
     {avatar_rects}
@@ -345,36 +384,36 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
 
   <!-- HP Bar -->
   <text class="pixel-text txt-main" x="134" y="91">HP</text>
-  <rect class="bar-bg" x="162" y="81" width="180" height="12" rx="1" />
-  <rect class="bar-hp" x="162" y="81" width="{int(180 * hp_pct)}" height="12" rx="1" />
+  <rect class="bar-bg" x="162" y="81" width="180" height="12" />
+  <rect class="bar-hp" x="162" y="81" width="{int(180 * hp_pct)}" height="12" />
   <text class="pixel-text txt-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
 
   <!-- MP Bar -->
   <text class="pixel-text txt-main" x="134" y="117">MP</text>
-  <rect class="bar-bg" x="162" y="107" width="180" height="12" rx="1" />
-  <rect class="bar-mp" x="162" y="107" width="{int(180 * mp_pct)}" height="12" rx="1" />
+  <rect class="bar-bg" x="162" y="107" width="180" height="12" />
+  <rect class="bar-mp" x="162" y="107" width="{int(180 * mp_pct)}" height="12" />
   <text class="pixel-text txt-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
   <!-- Status -->
   <text class="pixel-text txt-badge" x="134" y="152">STATE: {status_str}</text>
 
-  <!-- Bottom Left: Stats -->
-  <rect class="panel" x="16" y="180" width="236" height="124" rx="2" />
-  <rect class="panel-inner" x="20" y="184" width="228" height="116" rx="1" />
+  <!-- Bottom Left: Stats (コロン位置整列: x=102) -->
+  <path class="panel-outer" d="{p_btm_l_out}" />
+  <path class="panel-inner" d="{p_btm_l_in}" />
   <text class="pixel-text txt-main" x="30" y="204">-- STATS --</text>
-  <text class="pixel-text txt-sub" x="30" y="224">STR(PR)  : {data['str']}</text>
-  <text class="pixel-text txt-sub" x="30" y="239">AGI(CMT) : {data['agi']}</text>
-  <text class="pixel-text txt-sub" x="30" y="254">INT(REP) : {data['int']}</text>
-  <text class="pixel-text txt-sub" x="30" y="269">DEX(LNG) : {data['dex']}</text>
-  <text class="pixel-text txt-sub" x="30" y="284">LUK(STR) : {data['luk']}</text>
+  <text class="pixel-text txt-sub" x="30" y="224">STR(PR)</text>  <text class="pixel-text txt-sub" x="102" y="224">: {data['str']}</text>
+  <text class="pixel-text txt-sub" x="30" y="239">AGI(CMT)</text> <text class="pixel-text txt-sub" x="102" y="239">: {data['agi']}</text>
+  <text class="pixel-text txt-sub" x="30" y="254">INT(REP)</text> <text class="pixel-text txt-sub" x="102" y="254">: {data['int']}</text>
+  <text class="pixel-text txt-sub" x="30" y="269">DEX(LNG)</text> <text class="pixel-text txt-sub" x="102" y="269">: {data['dex']}</text>
+  <text class="pixel-text txt-sub" x="30" y="284">LUK(STR)</text> <text class="pixel-text txt-sub" x="102" y="284">: {data['luk']}</text>
 
-  <!-- Bottom Right: Equipments (表示幅拡張・途切れ防止) -->
-  <rect class="panel" x="268" y="180" width="236" height="124" rx="2" />
-  <rect class="panel-inner" x="272" y="184" width="228" height="116" rx="1" />
+  <!-- Bottom Right: Equipments (コロン位置整列: x=338) -->
+  <path class="panel-outer" d="{p_btm_r_out}" />
+  <path class="panel-inner" d="{p_btm_r_in}" />
   <text class="pixel-text txt-main" x="282" y="204">-- EQUIP --</text>
-  <text class="pixel-text txt-sub" x="282" y="228">M-WPN : {data['main_weapon'][:14]}</text>
-  <text class="pixel-text txt-sub" x="282" y="250">S-WPN : {sub_weapon[:14]}</text>
-  <text class="pixel-text txt-sub" x="282" y="272">ACC   : {accessory[:14]}</text>
+  <text class="pixel-text txt-sub" x="282" y="228">M-WPN</text> <text class="pixel-text txt-sub" x="338" y="228">: {data['main_weapon'][:13]}</text>
+  <text class="pixel-text txt-sub" x="282" y="250">S-WPN</text> <text class="pixel-text txt-sub" x="338" y="250">: {sub_weapon[:13]}</text>
+  <text class="pixel-text txt-sub" x="282" y="272">ACC</text>   <text class="pixel-text txt-sub" x="338" y="272">: {accessory[:13]}</text>
 </svg>"""
 
     # --- フォント自動抽出処理 (SVG内の全<text>タグから自動抽出) ---
@@ -406,7 +445,6 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
         }
         """
 
-    # プレースホルダーを実際のCSSに置換して完全なSVGを返却
     return raw_svg_text.replace("/*FONT_PLACEHOLDER*/", font_face_css)
 
 # -----------------------------------------------------------------------------
