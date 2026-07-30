@@ -6,6 +6,7 @@ import random
 import datetime
 import urllib.request
 import json
+import base64
 from io import BytesIO
 from PIL import Image
 
@@ -71,7 +72,23 @@ def fetch_github_data(token, username):
         return result['data']['user']
 
 # -----------------------------------------------------------------------------
-# 2. Logic & Calculations
+# 2. Pixel Font Fetcher (埋め込み用ドットフォントの取得)
+# -----------------------------------------------------------------------------
+FONT_URL = "https://fonts.gstatic.com/s/silkscreen/v1/m84XjfA4p0iQD3b_A1fa42hi1f8.woff2"
+
+def get_embedded_font_b64():
+    """ドットフォント(Silkscreen)をダウンロードしてBase64形式で取得"""
+    try:
+        req = urllib.request.Request(FONT_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as res:
+            font_data = res.read()
+            return base64.b64encode(font_data).decode('utf-8')
+    except Exception as e:
+        print(f"Warning: Could not fetch dot font: {e}")
+        return ""
+
+# -----------------------------------------------------------------------------
+# 3. Logic & Calculations
 # -----------------------------------------------------------------------------
 JOB_CATEGORIES = {
     'SAGE': ['Python', 'JavaScript', 'Ruby', 'PHP', 'Lua', 'Perl', 'Shell', 'R'],
@@ -82,14 +99,11 @@ JOB_CATEGORIES = {
 
 def determine_job(main_lang):
     if not main_lang:
-        return "Novice"
+        return "NOVICE"
     for job, langs in JOB_CATEGORIES.items():
         if any(l.lower() == main_lang.lower() for l in langs):
-            if job == 'SAGE': return "賢者"
-            if job == 'MAGE': return "魔導士"
-            if job == 'KNIGHT': return "騎士"
-            if job == 'SMITH': return "鍛冶師"
-    return "冒険者"
+            return job
+    return "HERO"
 
 def calculate_status(data):
     created_year = int(data['createdAt'][:4])
@@ -149,13 +163,13 @@ def calculate_status(data):
             weekday_commits += d['contributionCount']
 
     if active_days_streak >= 30:
-        status_effects.append("Burning")
+        status_effects.append("BURNING")
     
     if weekday_commits > 0 and (weekend_commits / (weekday_commits + weekend_commits)) > 0.8:
-        status_effects.append("Overwork")
+        status_effects.append("OVERWORK")
 
     if agi_stat > 50 and str_stat == 0:
-        status_effects.append("Ghost")
+        status_effects.append("GHOST")
 
     inactive_days = 0
     for d in reversed(days):
@@ -165,11 +179,11 @@ def calculate_status(data):
             break
 
     if inactive_days >= 365:
-        status_effects.append("Petrified")
+        status_effects.append("PETRIFIED")
     elif inactive_days >= 90:
-        status_effects.append("Frozen")
+        status_effects.append("FROZEN")
     elif inactive_days >= 30:
-        status_effects.append("Sleep")
+        status_effects.append("SLEEP")
 
     return {
         'lv': lv,
@@ -183,33 +197,38 @@ def calculate_status(data):
         'int': int_stat,
         'dex': dex,
         'luk': luk_stat,
-        'main_weapon': main_lang,
+        'main_weapon': main_lang.upper(),
         'status_effects': status_effects
     }
 
 # -----------------------------------------------------------------------------
-# 3. Avatar Pixel Art Generator (個別ドットアニメーション対応)
+# 4. Avatar Pixel Art Generator (16x16, 16色制限, 超軽量アニメーション)
 # -----------------------------------------------------------------------------
-def generate_pixel_avatar_rects(avatar_url, size=32):
+def generate_pixel_avatar_rects(avatar_url, size=16):
     try:
         req = urllib.request.Request(avatar_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as res:
             img_data = res.read()
         
         img = Image.open(BytesIO(img_data)).convert('RGB')
+        
+        # 16x16へリサイズ
         img_small = img.resize((size, size), Image.Resampling.LANCZOS)
         
-        rects_svg = []
-        scale = 3  # 32x32 -> 96x96
+        # 16色へ減色処理 (16-color Quantization)
+        img_16colors = img_small.quantize(colors=16).convert('RGB')
         
-        # 左上から右下へのアニメーションディレイ計算用 (最大値: 31 + 31 = 62)
+        rects_svg = []
+        scale = 6  # 16x16 -> 96x96 (1ドットあたりのサイズを2倍に拡張)
+        
+        # 256個のrect生成と16x16用の超軽量アニメーションディレイ計算
         for y in range(size):
             for x in range(size):
-                r, g, b = img_small.getpixel((x, y))
+                r, g, b = img_16colors.getpixel((x, y))
                 color_hex = f"#{r:02x}{g:02x}{b:02x}"
                 
-                # 左上(0) -> 右下(2.0秒の間で流れるようにディレイを設定)
-                delay = round(((x + y) / (size * 2)) * 1.8, 2)
+                # 左上(0.0s) -> 右下(1.2s) へのアニメーションウェーブ
+                delay = round(((x + y) / (size * 2)) * 1.2, 2)
                 
                 rects_svg.append(
                     f'<rect class="px-dot" x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" '
@@ -222,43 +241,51 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
         return '<rect x="0" y="0" width="96" height="96" fill="#555" />'
 
 # -----------------------------------------------------------------------------
-# 4. SVG Renderer
+# 5. SVG Renderer
 # -----------------------------------------------------------------------------
-def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
-    status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[Normal]"
+def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_b64):
+    status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[NORMAL]"
     
     hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
     mp_pct = min(1.0, data['mp_cur'] / max(1, data['mp_max']))
     
-    username = user_info['login']
+    username = user_info['login'].upper()
+
+    font_face_style = ""
+    if font_b64:
+        font_face_style = f"""
+      @font-face {{
+        font-family: 'EmbeddedPixelFont';
+        src: url(data:font/woff2;charset=utf-8;base64,{font_b64}) format('woff2');
+        font-weight: normal;
+        font-style: normal;
+      }}
+        """
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
     <style>
-      /* フォントの完全ドット文字（アンチエイリアス無効化）化 */
+      {font_face_style}
+
+      /* インライン埋め込みドットフォントの適用 */
       .text-main, .text-sub, .status-badge {{
-        font-family: 'Courier New', Courier, 'Nimbus Mono L', 'Lucida Console', Monaco, monospace;
-        letter-spacing: -0.5px;
+        font-family: 'EmbeddedPixelFont', 'Courier New', monospace;
         -webkit-font-smoothing: none;
         -moz-osx-font-smoothing: grayscale;
         font-smooth: never;
         text-rendering: pixelated;
-        image-rendering: pixelated;
       }}
 
       .text-main {{
-        font-size: 12px;
-        font-weight: 900;
+        font-size: 13px;
         fill: #2b1d0c;
       }}
       .text-sub {{
         font-size: 10px;
-        font-weight: 700;
         fill: #4a3319;
       }}
       .status-badge {{
         font-size: 10px;
-        font-weight: 700;
         fill: #8c4a00;
       }}
 
@@ -285,15 +312,15 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
         .status-badge {{ fill: #ffb703; }}
       }}
 
-      /* 1つ1つのドット(rect)が左上から右下にむけて発光するアニメーション */
+      /* 超軽量ドットピクセル発光アニメーション (256個のrectで動作) */
       @keyframes dot-flash {{
         0% {{ filter: brightness(1); }}
-        15% {{ filter: brightness(2.5) drop-shadow(0px 0px 1px #ffffff); }}
-        30% {{ filter: brightness(1); }}
+        20% {{ filter: brightness(2.2); }}
+        40% {{ filter: brightness(1); }}
         100% {{ filter: brightness(1); }}
       }}
       .px-dot {{
-        animation: dot-flash 4s infinite ease-in-out;
+        animation: dot-flash 3.5s infinite ease-in-out;
       }}
     </style>
 
@@ -314,14 +341,14 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   <!-- Header Panel -->
   <rect class="panel" x="16" y="16" width="488" height="40" rx="2" />
   <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="1" />
-  <text class="text-main" x="30" y="40">Lv.{data['lv']} {username}</text>
-  <text class="text-main" x="310" y="40">JOB:{data['job']}</text>
+  <text class="text-main" x="30" y="41">LV.{data['lv']} {username}</text>
+  <text class="text-main" x="310" y="41">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars Panel -->
   <rect class="panel" x="16" y="62" width="488" height="112" rx="2" />
   <rect class="panel-inner" x="20" y="66" width="480" height="104" rx="1" />
   
-  <!-- Pixel Avatar (96x96) -->
+  <!-- Pixel Avatar (16x16 / 16色制限 / 2倍大ドット) -->
   <g transform="translate(26, 70)">
     {avatar_rects}
   </g>
@@ -341,25 +368,25 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   <!-- Status Effects -->
   <text class="status-badge" x="134" y="150">STATE: {status_str}</text>
 
-  <!-- Bottom Left Panel: Stats -->
+  <!-- Bottom Left Panel: Stats (LUKはみ出し完全防止) -->
   <rect class="panel" x="16" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="20" y="184" width="228" height="116" rx="1" />
-  <text class="text-main" x="28" y="201">-- STATS --</text>
+  <text class="text-main" x="28" y="202">-- STATS --</text>
 
-  <text class="text-sub" x="28" y="218">STR(PR)</text>  <text class="text-sub" x="88" y="218">:</text> <text class="text-sub" x="98" y="218">{data['str']}</text>
-  <text class="text-sub" x="28" y="234">AGI(CMT)</text> <text class="text-sub" x="88" y="234">:</text> <text class="text-sub" x="98" y="234">{data['agi']}</text>
+  <text class="text-sub" x="28" y="220">STR(PR)</text>  <text class="text-sub" x="88" y="220">:</text> <text class="text-sub" x="98" y="220">{data['str']}</text>
+  <text class="text-sub" x="28" y="235">AGI(CMT)</text> <text class="text-sub" x="88" y="235">:</text> <text class="text-sub" x="98" y="235">{data['agi']}</text>
   <text class="text-sub" x="28" y="250">INT(REP)</text> <text class="text-sub" x="88" y="250">:</text> <text class="text-sub" x="98" y="250">{data['int']}</text>
-  <text class="text-sub" x="28" y="266">DEX(LNG)</text> <text class="text-sub" x="88" y="266">:</text> <text class="text-sub" x="98" y="266">{data['dex']}</text>
-  <text class="text-sub" x="28" y="282">LUK(STR)</text> <text class="text-sub" x="88" y="282">:</text> <text class="text-sub" x="98" y="282">{data['luk']}</text>
+  <text class="text-sub" x="28" y="265">DEX(LNG)</text> <text class="text-sub" x="88" y="265">:</text> <text class="text-sub" x="98" y="265">{data['dex']}</text>
+  <text class="text-sub" x="28" y="280">LUK(STR)</text> <text class="text-sub" x="88" y="280">:</text> <text class="text-sub" x="98" y="280">{data['luk']}</text>
 
   <!-- Bottom Right Panel: Equipments -->
   <rect class="panel" x="268" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="272" y="184" width="228" height="116" rx="1" />
-  <text class="text-main" x="280" y="201">-- EQUIP --</text>
+  <text class="text-main" x="280" y="202">-- EQUIP --</text>
 
-  <text class="text-sub" x="280" y="224">M-WPN</text> <text class="text-sub" x="322" y="224">:</text> <text class="text-sub" x="332" y="224">{data['main_weapon'][:9]}</text>
-  <text class="text-sub" x="280" y="248">S-WPN</text> <text class="text-sub" x="322" y="248">:</text> <text class="text-sub" x="332" y="248">{sub_weapon[:9]}</text>
-  <text class="text-sub" x="280" y="272">ACC</text>   <text class="text-sub" x="322" y="272">:</text> <text class="text-sub" x="332" y="272">{accessory[:9]}</text>
+  <text class="text-sub" x="280" y="226">M-WPN</text> <text class="text-sub" x="322" y="226">:</text> <text class="text-sub" x="332" y="226">{data['main_weapon'][:9]}</text>
+  <text class="text-sub" x="280" y="250">S-WPN</text> <text class="text-sub" x="322" y="250">:</text> <text class="text-sub" x="332" y="250">{sub_weapon.upper()[:9]}</text>
+  <text class="text-sub" x="280" y="274">ACC</text>   <text class="text-sub" x="322" y="274">:</text> <text class="text-sub" x="332" y="274">{accessory.upper()[:9]}</text>
 </svg>"""
     return svg
 
@@ -370,9 +397,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--token', required=True)
     parser.add_argument('--username', required=True)
-    parser.add_argument('--sub-weapons', default="Excalibur,Shield,Magic Wand,Kunai")
-    parser.add_argument('--accessories', default="Ring of Power,Amulet,Hermes Boots")
-    parser.default="status.svg"
+    parser.add_argument('--sub-weapons', default="EXCALIBUR,SHIELD,WAND,KUNAI")
+    parser.add_argument('--accessories', default="RING,AMULET,BOOTS")
     parser.add_argument('--output', default="status.svg")
     args = parser.parse_args()
 
@@ -389,10 +415,11 @@ if __name__ == "__main__":
     chosen_acc = random.choice(acc_list)
 
     avatar_rects = generate_pixel_avatar_rects(raw_data['avatarUrl'])
+    font_b64 = get_embedded_font_b64()
 
-    svg_content = build_svg(status_data, raw_data, avatar_rects, chosen_sub, chosen_acc)
+    svg_content = build_svg(status_data, raw_data, avatar_rects, chosen_sub, chosen_acc, font_b64)
 
     with open(args.output, 'w', encoding='utf-8') as f:
         f.write(svg_content)
 
-    print(f"Successfully generated {args.output} (Seed: {seed_str})")
+    print(f"Successfully generated {args.output} with embedded pixel font!")
