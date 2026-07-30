@@ -13,6 +13,10 @@ inputs:
     description: 'Comma separated list of accessories to randomly pick from'
     required: false
     default: 'Ring of Power,Amulet of Life,Hermes Boots,Pendant of Wisdom'
+  font_path:
+    description: 'Path to the TTF/OTF font file for sub-setting'
+    required: false
+    default: 'font.ttf'
   output_path:
     description: 'Output SVG file path'
     required: false
@@ -37,5 +41,6 @@ runs:
           --username "${{ github.repository_owner }}" \
           --sub-weapons "${{ inputs.sub_weapons }}" \
           --accessories "${{ inputs.accessories }}" \
+          --font-path "${{ github.action_path }}/${{ inputs.font_path }}" \
           --output "${{ inputs.output_path }}"
       shell: bash
