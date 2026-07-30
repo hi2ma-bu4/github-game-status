@@ -92,12 +92,10 @@ def determine_job(main_lang):
     return "冒険者"
 
 def calculate_status(data):
-    # Lv: アカウント作成年数（1スタート）
     created_year = int(data['createdAt'][:4])
     current_year = datetime.datetime.now().year
     lv = max(1, current_year - created_year)
 
-    # 言語統計 & 総スター数
     lang_sizes = {}
     total_stars = 0
     repos = data['repositories']['nodes']
@@ -112,11 +110,9 @@ def calculate_status(data):
     main_lang = sorted_langs[0][0] if sorted_langs else "None"
     dex = len(lang_sizes)
 
-    # コミット・PR履歴解析（カレンダー）
     weeks = data['contributionsCollection']['contributionCalendar']['weeks']
     days = [d for w in weeks for d in w['contributionDays']]
     
-    # 過去4週間の計算
     last_4_weeks = weeks[-4:] if len(weeks) >= 4 else weeks
     weekly_commits = [sum(d['contributionCount'] for d in w['contributionDays']) for w in last_4_weeks]
     
@@ -129,18 +125,13 @@ def calculate_status(data):
     int_stat = data['contributionsCollection']['totalRepositoryContributions']
     luk_stat = total_stars
 
-    # 今週の数値と過去4週最大値（HP / MP）
     hp_cur = this_week_commits
     hp_max = max_week_commits
     
-    # MPはPRの実績から計算（今週PR数と最大値）
-    # ダミー的上限補正
     mp_cur = min(str_stat, 99)
     mp_max = max(str_stat, 10)
 
-    # 状態異常の判定
     status_effects = []
-    
     active_days_streak = 0
     for d in reversed(days):
         if d['contributionCount'] > 0:
@@ -197,7 +188,7 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 3. Avatar Pixel Art Generator (Smooth Pixelated Art)
+# 3. Avatar Pixel Art Generator
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=32):
     try:
@@ -206,8 +197,6 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
             img_data = res.read()
         
         img = Image.open(BytesIO(img_data)).convert('RGB')
-        
-        # ディザリングによるジャギ・格子線感を排除し、滑らかなドット絵にする調整
         img_small = img.resize((size, size), Image.Resampling.LANCZOS)
         
         rects_svg = []
@@ -224,25 +213,27 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
         return '<rect x="0" y="0" width="96" height="96" fill="#555" />'
 
 # -----------------------------------------------------------------------------
-# 4. SVG Renderer (Textured & Formatted)
+# 4. SVG Renderer
 # -----------------------------------------------------------------------------
 def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[Normal]"
     
-    # HP/MP割合計算
     hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
     mp_pct = min(1.0, data['mp_cur'] / max(1, data['mp_max']))
     
-    # ユーザー名はそのままケースを維持
     username = user_info['login']
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
     <style>
-      /* GitHubで崩れないWeb標準レトロフォント構成 */
+      /* ドット感を強調するフォント設定（アンチエイリアス切断） */
       .font-pixel {{
-        font-family: 'Courier New', Courier, 'MS Gothic', 'Yu Gothic', monospace;
-        letter-spacing: 0.5px;
+        font-family: 'PixelMplus10', 'vt323', 'Silkscreen', 'Monaco', 'Consolas', 'Courier New', monospace;
+        letter-spacing: 0px;
+        -webkit-font-smoothing: none;
+        -moz-osx-font-smoothing: grayscale;
+        font-smooth: never;
+        text-rendering: pixelated;
       }}
 
       /* --- ライトモード (羊皮紙・レトロゲームUI) --- */
@@ -267,28 +258,34 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
         stroke-width: 1;
       }}
       .text-main {{
-        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
         font-size: 13px;
         font-weight: bold;
         fill: #2b1d0c;
+        -webkit-font-smoothing: none;
+        font-smooth: never;
       }}
       .text-sub {{
-        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
         font-size: 11px;
         font-weight: bold;
         fill: #5c4033;
+        -webkit-font-smoothing: none;
+        font-smooth: never;
       }}
       .bar-bg {{ fill: #c7b08b; stroke: #8c6d53; stroke-width: 1; }}
       .bar-hp {{ fill: #d32f2f; }}
       .bar-mp {{ fill: #1976d2; }}
       .status-badge {{
-        font-family: 'Courier New', Courier, 'MS Gothic', monospace;
+        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
         font-size: 11px;
         font-weight: bold;
         fill: #8c4a00;
+        -webkit-font-smoothing: none;
+        font-smooth: never;
       }}
 
-      /* --- ダークモード (妖しい古文書・魔導書UI) --- */
+      /* --- ダークモード --- */
       @media (prefers-color-scheme: dark) {{
         .bg-outer {{
           fill: #15121e;
@@ -307,7 +304,6 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
         }}
         .text-main {{
           fill: #00ffcc;
-          text-shadow: 0 0 1px #00ffcc;
         }}
         .text-sub {{
           fill: #cbb8ff;
@@ -319,6 +315,16 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
           fill: #ffb703;
         }}
       }}
+
+      /* アバター光沢アニメーション */
+      @keyframes shine {{
+        0% {{ transform: translate(-100px, -100px) rotate(45deg); }}
+        20% {{ transform: translate(150px, 150px) rotate(45deg); }}
+        100% {{ transform: translate(150px, 150px) rotate(45deg); }}
+      }}
+      .shine-effect {{
+        animation: shine 4s infinite ease-in-out;
+      }}
     </style>
 
     <!-- ノイズテクスチャフィルター -->
@@ -329,6 +335,18 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
       </feDiffuseLighting>
       <feBlend mode="multiply" in="SourceGraphic" in2="light" result="blend" />
     </filter>
+
+    <!-- 光エフェクト用クリップ領域 -->
+    <clipPath id="avatar-clip">
+      <rect x="0" y="0" width="96" height="96" rx="2" />
+    </clipPath>
+
+    <!-- 掠める光のグラデーション -->
+    <linearGradient id="shine-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
   </defs>
 
   <!-- Base Outer Frame -->
@@ -338,16 +356,19 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   <!-- Header Panel -->
   <rect class="panel" x="16" y="16" width="488" height="40" rx="3" />
   <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="2" />
-  <text class="text-main" x="32" y="41">Lv.{data['lv']} {username}</text>
-  <text class="text-main" x="320" y="41">JOB:{data['job']}</text>
+  <text class="text-main" x="30" y="41">Lv.{data['lv']} {username}</text>
+  <text class="text-main" x="310" y="41">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars Panel -->
   <rect class="panel" x="16" y="64" width="488" height="112" rx="3" />
   <rect class="panel-inner" x="20" y="68" width="480" height="104" rx="2" />
   
-  <!-- Smooth Pixel Avatar (96x96) -->
+  <!-- Pixel Avatar (96x96) with Shine Animation -->
   <g transform="translate(26, 72)">
     {avatar_rects}
+    <g clip-path="url(#avatar-clip)">
+      <rect class="shine-effect" x="0" y="0" width="40" height="180" fill="url(#shine-grad)" />
+    </g>
   </g>
 
   <!-- HP Bar -->
@@ -365,23 +386,25 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
   <!-- Status Effects -->
   <text class="status-badge" x="134" y="154">STATE: {status_str}</text>
 
-  <!-- Bottom Left Panel: Stats -->
+  <!-- Bottom Left Panel: Stats (Aligned Colons) -->
   <rect class="panel" x="16" y="184" width="236" height="120" rx="3" />
   <rect class="panel-inner" x="20" y="188" width="228" height="112" rx="2" />
-  <text class="text-main" x="28" y="208">-- STATS --</text>
-  <text class="text-sub" x="28" y="228">STR(PR)  : {data['str']}</text>
-  <text class="text-sub" x="28" y="246">AGI(CMT) : {data['agi']}</text>
-  <text class="text-sub" x="28" y="264">INT(REP) : {data['int']}</text>
-  <text class="text-sub" x="28" y="282">DEX(LNG) : {data['dex']}</text>
-  <text class="text-sub" x="30" y="300">LUK(STR) : {data['luk']}</text>
+  <text class="text-main" x="28" y="207">-- STATS --</text>
 
-  <!-- Bottom Right Panel: Equipments -->
+  <text class="text-sub" x="28" y="226">STR(PR)</text>  <text class="text-sub" x="90" y="226">:</text> <text class="text-sub" x="100" y="226">{data['str']}</text>
+  <text class="text-sub" x="28" y="244">AGI(CMT)</text> <text class="text-sub" x="90" y="244">:</text> <text class="text-sub" x="100" y="244">{data['agi']}</text>
+  <text class="text-sub" x="28" y="262">INT(REP)</text> <text class="text-sub" x="90" y="262">:</text> <text class="text-sub" x="100" y="262">{data['int']}</text>
+  <text class="text-sub" x="28" y="280">DEX(LNG)</text> <text class="text-sub" x="90" y="280">:</text> <text class="text-sub" x="100" y="280">{data['dex']}</text>
+  <text class="text-sub" x="28" y="298">LUK(STR)</text> <text class="text-sub" x="90" y="298">:</text> <text class="text-sub" x="100" y="298">{data['luk']}</text>
+
+  <!-- Bottom Right Panel: Equipments (Aligned Colons) -->
   <rect class="panel" x="268" y="184" width="236" height="120" rx="3" />
   <rect class="panel-inner" x="272" y="188" width="228" height="112" rx="2" />
-  <text class="text-main" x="280" y="208">-- EQUIP --</text>
-  <text class="text-sub" x="280" y="232">M-WPN : {data['main_weapon'][:11]}</text>
-  <text class="text-sub" x="280" y="258">S-WPN : {sub_weapon[:11]}</text>
-  <text class="text-sub" x="280" y="284">ACC   : {accessory[:11]}</text>
+  <text class="text-main" x="280" y="207">-- EQUIP --</text>
+
+  <text class="text-sub" x="280" y="232">M-WPN</text> <text class="text-sub" x="325" y="232">:</text> <text class="text-sub" x="335" y="232">{data['main_weapon'][:9]}</text>
+  <text class="text-sub" x="280" y="258">S-WPN</text> <text class="text-sub" x="325" y="258">:</text> <text class="text-sub" x="335" y="258">{sub_weapon[:9]}</text>
+  <text class="text-sub" x="280" y="284">ACC</text>   <text class="text-sub" x="325" y="284">:</text> <text class="text-sub" x="335" y="284">{accessory[:9]}</text>
 </svg>"""
     return svg
 
