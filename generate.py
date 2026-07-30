@@ -521,9 +521,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-main" x="146" y="91">HP</text>
   <rect class="bar-bg" x="170" y="81" width="172" height="12" />
   <svg x="170" y="81" width="172" height="12">
-    <rect class="bar-hp" x="0" y="0" width="{int(172 * hp_pct)}" height="12">
-      <animate attributeName="x" from="0" to="-40" dur="2s" repeatCount="indefinite" />
-    </rect>
+    <rect class="bar-hp" x="0" y="0" width="{int(172 * hp_pct)}" height="12" />
   </svg>
   <text class="pixel-text txt-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
 
@@ -534,9 +532,7 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_path):
   <text class="pixel-text txt-main" x="146" y="117">MP</text>
   <rect class="bar-bg" x="170" y="107" width="172" height="12" />
   <svg x="170" y="107" width="172" height="12">
-    <rect class="bar-mp" x="0" y="0" width="{int(172 * mp_pct)}" height="12">
-      <animate attributeName="x" from="0" to="-40" dur="2s" repeatCount="indefinite" />
-    </rect>
+    <rect class="bar-mp" x="0" y="0" width="{int(172 * mp_pct)}" height="12" />
   </svg>
   <text class="pixel-text txt-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
