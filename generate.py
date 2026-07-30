@@ -188,7 +188,7 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 3. Avatar Pixel Art Generator
+# 3. Avatar Pixel Art Generator (個別ドットアニメーション対応)
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=32):
     try:
@@ -201,11 +201,20 @@ def generate_pixel_avatar_rects(avatar_url, size=32):
         
         rects_svg = []
         scale = 3  # 32x32 -> 96x96
+        
+        # 左上から右下へのアニメーションディレイ計算用 (最大値: 31 + 31 = 62)
         for y in range(size):
             for x in range(size):
                 r, g, b = img_small.getpixel((x, y))
                 color_hex = f"#{r:02x}{g:02x}{b:02x}"
-                rects_svg.append(f'<rect x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" fill="{color_hex}" />')
+                
+                # 左上(0) -> 右下(2.0秒の間で流れるようにディレイを設定)
+                delay = round(((x + y) / (size * 2)) * 1.8, 2)
+                
+                rects_svg.append(
+                    f'<rect class="px-dot" x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" '
+                    f'fill="{color_hex}" style="animation-delay: {delay}s;" />'
+                )
         
         return "".join(rects_svg)
     except Exception as e:
@@ -226,185 +235,131 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
     <style>
-      /* ドット感を強調するフォント設定（アンチエイリアス切断） */
-      .font-pixel {{
-        font-family: 'PixelMplus10', 'vt323', 'Silkscreen', 'Monaco', 'Consolas', 'Courier New', monospace;
-        letter-spacing: 0px;
+      /* フォントの完全ドット文字（アンチエイリアス無効化）化 */
+      .text-main, .text-sub, .status-badge {{
+        font-family: 'Courier New', Courier, 'Nimbus Mono L', 'Lucida Console', Monaco, monospace;
+        letter-spacing: -0.5px;
         -webkit-font-smoothing: none;
         -moz-osx-font-smoothing: grayscale;
         font-smooth: never;
         text-rendering: pixelated;
+        image-rendering: pixelated;
       }}
 
-      /* --- ライトモード (羊皮紙・レトロゲームUI) --- */
-      .bg-outer {{
-        fill: #d8c29d;
-        stroke: #4a3525;
-        stroke-width: 4;
-      }}
-      .bg-parchment {{
-        fill: #f2e3c6;
-        filter: url(#paper-texture);
-      }}
-      .panel {{
-        fill: #edd2a8;
-        stroke: #735338;
-        stroke-width: 2;
-        filter: url(#paper-texture);
-      }}
-      .panel-inner {{
-        fill: #fdf6e7;
-        stroke: #bfa17c;
-        stroke-width: 1;
-      }}
       .text-main {{
-        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
-        font-size: 13px;
-        font-weight: bold;
+        font-size: 12px;
+        font-weight: 900;
         fill: #2b1d0c;
-        -webkit-font-smoothing: none;
-        font-smooth: never;
       }}
       .text-sub {{
-        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
-        font-size: 11px;
-        font-weight: bold;
-        fill: #5c4033;
-        -webkit-font-smoothing: none;
-        font-smooth: never;
+        font-size: 10px;
+        font-weight: 700;
+        fill: #4a3319;
       }}
+      .status-badge {{
+        font-size: 10px;
+        font-weight: 700;
+        fill: #8c4a00;
+      }}
+
+      /* ライトモード */
+      .bg-outer {{ fill: #d8c29d; stroke: #4a3525; stroke-width: 4; }}
+      .bg-parchment {{ fill: #f2e3c6; filter: url(#paper-texture); }}
+      .panel {{ fill: #edd2a8; stroke: #735338; stroke-width: 2; filter: url(#paper-texture); }}
+      .panel-inner {{ fill: #fdf6e7; stroke: #bfa17c; stroke-width: 1; }}
       .bar-bg {{ fill: #c7b08b; stroke: #8c6d53; stroke-width: 1; }}
       .bar-hp {{ fill: #d32f2f; }}
       .bar-mp {{ fill: #1976d2; }}
-      .status-badge {{
-        font-family: 'PixelMplus10', 'Monaco', 'Consolas', 'Courier New', monospace;
-        font-size: 11px;
-        font-weight: bold;
-        fill: #8c4a00;
-        -webkit-font-smoothing: none;
-        font-smooth: never;
-      }}
 
-      /* --- ダークモード --- */
+      /* ダークモード */
       @media (prefers-color-scheme: dark) {{
-        .bg-outer {{
-          fill: #15121e;
-          stroke: #6b529c;
-        }}
-        .bg-parchment {{
-          fill: #1f1a2e;
-        }}
-        .panel {{
-          fill: #29223d;
-          stroke: #513e78;
-        }}
-        .panel-inner {{
-          fill: #14111f;
-          stroke: #3d305c;
-        }}
-        .text-main {{
-          fill: #00ffcc;
-        }}
-        .text-sub {{
-          fill: #cbb8ff;
-        }}
+        .bg-outer {{ fill: #15121e; stroke: #6b529c; }}
+        .bg-parchment {{ fill: #1f1a2e; }}
+        .panel {{ fill: #29223d; stroke: #513e78; }}
+        .panel-inner {{ fill: #14111f; stroke: #3d305c; }}
+        .text-main {{ fill: #00ffcc; }}
+        .text-sub {{ fill: #cbb8ff; }}
         .bar-bg {{ fill: #1a1528; stroke: #453566; }}
         .bar-hp {{ fill: #ff4545; }}
         .bar-mp {{ fill: #3892ff; }}
-        .status-badge {{
-          fill: #ffb703;
-        }}
+        .status-badge {{ fill: #ffb703; }}
       }}
 
-      /* アバター光沢アニメーション */
-      @keyframes shine {{
-        0% {{ transform: translate(-100px, -100px) rotate(45deg); }}
-        20% {{ transform: translate(150px, 150px) rotate(45deg); }}
-        100% {{ transform: translate(150px, 150px) rotate(45deg); }}
+      /* 1つ1つのドット(rect)が左上から右下にむけて発光するアニメーション */
+      @keyframes dot-flash {{
+        0% {{ filter: brightness(1); }}
+        15% {{ filter: brightness(2.5) drop-shadow(0px 0px 1px #ffffff); }}
+        30% {{ filter: brightness(1); }}
+        100% {{ filter: brightness(1); }}
       }}
-      .shine-effect {{
-        animation: shine 4s infinite ease-in-out;
+      .px-dot {{
+        animation: dot-flash 4s infinite ease-in-out;
       }}
     </style>
 
     <!-- ノイズテクスチャフィルター -->
     <filter id="paper-texture" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="4" result="noise" />
-      <feDiffuseLighting in="noise" lighting-color="#ffffff" surfaceScale="1.5" result="light">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
+      <feDiffuseLighting in="noise" lighting-color="#ffffff" surfaceScale="1.2" result="light">
         <feDistantLight azimuth="45" elevation="60" />
       </feDiffuseLighting>
       <feBlend mode="multiply" in="SourceGraphic" in2="light" result="blend" />
     </filter>
-
-    <!-- 光エフェクト用クリップ領域 -->
-    <clipPath id="avatar-clip">
-      <rect x="0" y="0" width="96" height="96" rx="2" />
-    </clipPath>
-
-    <!-- 掠める光のグラデーション -->
-    <linearGradient id="shine-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.5" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-    </linearGradient>
   </defs>
 
   <!-- Base Outer Frame -->
-  <rect class="bg-outer" x="4" y="4" width="512" height="312" rx="6" />
-  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="4" />
+  <rect class="bg-outer" x="4" y="4" width="512" height="312" rx="4" />
+  <rect class="bg-parchment" x="8" y="8" width="504" height="304" rx="2" />
 
   <!-- Header Panel -->
-  <rect class="panel" x="16" y="16" width="488" height="40" rx="3" />
-  <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="2" />
-  <text class="text-main" x="30" y="41">Lv.{data['lv']} {username}</text>
-  <text class="text-main" x="310" y="41">JOB:{data['job']}</text>
+  <rect class="panel" x="16" y="16" width="488" height="40" rx="2" />
+  <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="1" />
+  <text class="text-main" x="30" y="40">Lv.{data['lv']} {username}</text>
+  <text class="text-main" x="310" y="40">JOB:{data['job']}</text>
 
   <!-- Avatar & Bars Panel -->
-  <rect class="panel" x="16" y="64" width="488" height="112" rx="3" />
-  <rect class="panel-inner" x="20" y="68" width="480" height="104" rx="2" />
+  <rect class="panel" x="16" y="62" width="488" height="112" rx="2" />
+  <rect class="panel-inner" x="20" y="66" width="480" height="104" rx="1" />
   
-  <!-- Pixel Avatar (96x96) with Shine Animation -->
-  <g transform="translate(26, 72)">
+  <!-- Pixel Avatar (96x96) -->
+  <g transform="translate(26, 70)">
     {avatar_rects}
-    <g clip-path="url(#avatar-clip)">
-      <rect class="shine-effect" x="0" y="0" width="40" height="180" fill="url(#shine-grad)" />
-    </g>
   </g>
 
   <!-- HP Bar -->
-  <text class="text-main" x="134" y="94">HP</text>
-  <rect class="bar-bg" x="162" y="83" width="180" height="13" rx="2" />
-  <rect class="bar-hp" x="162" y="83" width="{int(180 * hp_pct)}" height="13" rx="2" />
-  <text class="text-sub" x="350" y="94">{data['hp_cur']}/{data['hp_max']}</text>
+  <text class="text-main" x="134" y="92">HP</text>
+  <rect class="bar-bg" x="162" y="81" width="180" height="12" rx="1" />
+  <rect class="bar-hp" x="162" y="81" width="{int(180 * hp_pct)}" height="12" rx="1" />
+  <text class="text-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
 
   <!-- MP Bar -->
-  <text class="text-main" x="134" y="122">MP</text>
-  <rect class="bar-bg" x="162" y="111" width="180" height="13" rx="2" />
-  <rect class="bar-mp" x="162" y="111" width="{int(180 * mp_pct)}" height="13" rx="2" />
-  <text class="text-sub" x="350" y="122">{data['mp_cur']}/{data['mp_max']}</text>
+  <text class="text-main" x="134" y="118">MP</text>
+  <rect class="bar-bg" x="162" y="107" width="180" height="12" rx="1" />
+  <rect class="bar-mp" x="162" y="107" width="{int(180 * mp_pct)}" height="12" rx="1" />
+  <text class="text-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
 
   <!-- Status Effects -->
-  <text class="status-badge" x="134" y="154">STATE: {status_str}</text>
+  <text class="status-badge" x="134" y="150">STATE: {status_str}</text>
 
-  <!-- Bottom Left Panel: Stats (Aligned Colons) -->
-  <rect class="panel" x="16" y="184" width="236" height="120" rx="3" />
-  <rect class="panel-inner" x="20" y="188" width="228" height="112" rx="2" />
-  <text class="text-main" x="28" y="207">-- STATS --</text>
+  <!-- Bottom Left Panel: Stats -->
+  <rect class="panel" x="16" y="180" width="236" height="124" rx="2" />
+  <rect class="panel-inner" x="20" y="184" width="228" height="116" rx="1" />
+  <text class="text-main" x="28" y="201">-- STATS --</text>
 
-  <text class="text-sub" x="28" y="226">STR(PR)</text>  <text class="text-sub" x="90" y="226">:</text> <text class="text-sub" x="100" y="226">{data['str']}</text>
-  <text class="text-sub" x="28" y="244">AGI(CMT)</text> <text class="text-sub" x="90" y="244">:</text> <text class="text-sub" x="100" y="244">{data['agi']}</text>
-  <text class="text-sub" x="28" y="262">INT(REP)</text> <text class="text-sub" x="90" y="262">:</text> <text class="text-sub" x="100" y="262">{data['int']}</text>
-  <text class="text-sub" x="28" y="280">DEX(LNG)</text> <text class="text-sub" x="90" y="280">:</text> <text class="text-sub" x="100" y="280">{data['dex']}</text>
-  <text class="text-sub" x="28" y="298">LUK(STR)</text> <text class="text-sub" x="90" y="298">:</text> <text class="text-sub" x="100" y="298">{data['luk']}</text>
+  <text class="text-sub" x="28" y="218">STR(PR)</text>  <text class="text-sub" x="88" y="218">:</text> <text class="text-sub" x="98" y="218">{data['str']}</text>
+  <text class="text-sub" x="28" y="234">AGI(CMT)</text> <text class="text-sub" x="88" y="234">:</text> <text class="text-sub" x="98" y="234">{data['agi']}</text>
+  <text class="text-sub" x="28" y="250">INT(REP)</text> <text class="text-sub" x="88" y="250">:</text> <text class="text-sub" x="98" y="250">{data['int']}</text>
+  <text class="text-sub" x="28" y="266">DEX(LNG)</text> <text class="text-sub" x="88" y="266">:</text> <text class="text-sub" x="98" y="266">{data['dex']}</text>
+  <text class="text-sub" x="28" y="282">LUK(STR)</text> <text class="text-sub" x="88" y="282">:</text> <text class="text-sub" x="98" y="282">{data['luk']}</text>
 
-  <!-- Bottom Right Panel: Equipments (Aligned Colons) -->
-  <rect class="panel" x="268" y="184" width="236" height="120" rx="3" />
-  <rect class="panel-inner" x="272" y="188" width="228" height="112" rx="2" />
-  <text class="text-main" x="280" y="207">-- EQUIP --</text>
+  <!-- Bottom Right Panel: Equipments -->
+  <rect class="panel" x="268" y="180" width="236" height="124" rx="2" />
+  <rect class="panel-inner" x="272" y="184" width="228" height="116" rx="1" />
+  <text class="text-main" x="280" y="201">-- EQUIP --</text>
 
-  <text class="text-sub" x="280" y="232">M-WPN</text> <text class="text-sub" x="325" y="232">:</text> <text class="text-sub" x="335" y="232">{data['main_weapon'][:9]}</text>
-  <text class="text-sub" x="280" y="258">S-WPN</text> <text class="text-sub" x="325" y="258">:</text> <text class="text-sub" x="335" y="258">{sub_weapon[:9]}</text>
-  <text class="text-sub" x="280" y="284">ACC</text>   <text class="text-sub" x="325" y="284">:</text> <text class="text-sub" x="335" y="284">{accessory[:9]}</text>
+  <text class="text-sub" x="280" y="224">M-WPN</text> <text class="text-sub" x="322" y="224">:</text> <text class="text-sub" x="332" y="224">{data['main_weapon'][:9]}</text>
+  <text class="text-sub" x="280" y="248">S-WPN</text> <text class="text-sub" x="322" y="248">:</text> <text class="text-sub" x="332" y="248">{sub_weapon[:9]}</text>
+  <text class="text-sub" x="280" y="272">ACC</text>   <text class="text-sub" x="322" y="272">:</text> <text class="text-sub" x="332" y="272">{accessory[:9]}</text>
 </svg>"""
     return svg
 
@@ -417,6 +372,7 @@ if __name__ == "__main__":
     parser.add_argument('--username', required=True)
     parser.add_argument('--sub-weapons', default="Excalibur,Shield,Magic Wand,Kunai")
     parser.add_argument('--accessories', default="Ring of Power,Amulet,Hermes Boots")
+    parser.default="status.svg"
     parser.add_argument('--output', default="status.svg")
     args = parser.parse_args()
 
