@@ -1,0 +1,41 @@
+name: 'GitHub Game Status'
+description: 'Generates a retro RPG status SVG for GitHub profile'
+inputs:
+  github_token:
+    description: 'GitHub Token for fetching user stats'
+    required: true
+    default: ${{ github.token }}
+  sub_weapons:
+    description: 'Comma separated list of sub weapons to randomly pick from'
+    required: false
+    default: 'Aegis Shield,Magic Wand,Kunai,Holy Bible,Master Sword'
+  accessories:
+    description: 'Comma separated list of accessories to randomly pick from'
+    required: false
+    default: 'Ring of Power,Amulet of Life,Hermes Boots,Pendant of Wisdom'
+  output_path:
+    description: 'Output SVG file path'
+    required: false
+    default: 'status.svg'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+      shell: bash
+
+    - name: Generate Status SVG
+      run: |
+        python ${{ github.action_path }}/generate.py \
+          --token "${{ inputs.github_token }}" \
+          --username "${{ github.repository_owner }}" \
+          --sub-weapons "${{ inputs.sub_weapons }}" \
+          --accessories "${{ inputs.accessories }}" \
+          --output "${{ inputs.output_path }}"
+      shell: bash
