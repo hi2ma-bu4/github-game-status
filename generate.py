@@ -6,7 +6,6 @@ import random
 import datetime
 import urllib.request
 import json
-import base64
 from io import BytesIO
 from PIL import Image
 
@@ -72,20 +71,72 @@ def fetch_github_data(token, username):
         return result['data']['user']
 
 # -----------------------------------------------------------------------------
-# 2. Pixel Font Fetcher (埋め込み用ドットフォントの取得)
+# 2. Built-in 5x7 Pixel Font Engine (外部非依存・完全ドット文字)
 # -----------------------------------------------------------------------------
-FONT_URL = "https://fonts.gstatic.com/s/silkscreen/v1/m84XjfA4p0iQD3b_A1fa42hi1f8.woff2"
+PIXEL_FONT = {
+    'A': [" █ ", "█ █", "███", "█ █", "█ █"],
+    'B': ["██ ", "█ █", "██ ", "█ █", "██ "],
+    'C': [" ██", "█  ", "█  ", "█  ", " ██"],
+    'D': ["██ ", "█ █", "█ █", "█ █", "██ "],
+    'E': ["███", "█  ", "██ ", "█  ", "███"],
+    'F': ["███", "█  ", "██ ", "█  ", "█  "],
+    'G': [" ██", "█  ", "█ █", "█ █", " ██"],
+    'H': ["█ █", "█ █", "███", "█ █", "█ █"],
+    'I': ["███", " █ ", " █ ", " █ ", "███"],
+    'J': ["  █", "  █", "  █", "█ █", " █ "],
+    'K': ["█ █", "██ ", "█  ", "██ ", "█ █"],
+    'L': ["█  ", "█  ", "█  ", "█  ", "███"],
+    'M': ["█ █", "███", "█ █", "█ █", "█ █"],
+    'N': ["█ █", "███", "███", "█ █", "█ █"],
+    'O': [" ██", "█ █", "█ █", "█ █", " ██"],
+    'P': ["██ ", "█ █", "██ ", "█  ", "█  "],
+    'Q': [" ██", "█ █", "█ █", "██ ", " ██"],
+    'R': ["██ ", "█ █", "██ ", "█ █", "█ █"],
+    'S': [" ██", "█  ", " ██", "  █", "██ "],
+    'T': ["███", " █ ", " █ ", " █ ", " █ "],
+    'U': ["█ █", "█ █", "█ █", "█ █", " ██"],
+    'V': ["█ █", "█ █", "█ █", "█ █", " █ "],
+    'W': ["█ █", "█ █", "█ █", "███", "█ █"],
+    'X': ["█ █", "█ █", " █ ", "█ █", "█ █"],
+    'Y': ["█ █", "█ █", " █ ", " █ ", " █ "],
+    'Z': ["███", "  █", " █ ", "█  ", "███"],
+    '0': ["███", "█ █", "█ █", "█ █", "███"],
+    '1': [" █ ", "██ ", " █ ", " █ ", "███"],
+    '2': ["███", "  █", "███", "█  ", "███"],
+    '3': ["███", "  █", "███", "  █", "███"],
+    '4': ["█ █", "█ █", "███", "  █", "  █"],
+    '5': ["███", "█  ", "███", "  █", "███"],
+    '6': ["███", "█  ", "███", "█ █", "███"],
+    '7': ["███", "  █", "  █", "  █", "  █"],
+    '8': ["███", "█ █", "███", "█ █", "███"],
+    '9': ["███", "█ █", "███", "  █", "███"],
+    ':': ["   ", " █ ", "   ", " █ ", "   "],
+    '.': ["   ", "   ", "   ", "   ", " █ "],
+    '-': ["   ", "   ", "███", "   ", "   "],
+    '[': ["██ ", "█  ", "█  ", "█  ", "██ "],
+    ']': [" ██", "  █", "  █", "  █", " ██"],
+    '(': ["  █", " █ ", " █ ", " █ ", "  █"],
+    ')': ["█  ", " █ ", " █ ", " █ ", "█  "],
+    '/': ["  █", "  █", " █ ", "█  ", "█  "],
+    ' ': ["   ", "   ", "   ", "   ", "   "]
+}
 
-def get_embedded_font_b64():
-    """ドットフォント(Silkscreen)をダウンロードしてBase64形式で取得"""
-    try:
-        req = urllib.request.Request(FONT_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as res:
-            font_data = res.read()
-            return base64.b64encode(font_data).decode('utf-8')
-    except Exception as e:
-        print(f"Warning: Could not fetch dot font: {e}")
-        return ""
+def render_pixel_text(text, x, y, size=2, fill="#2b1d0c"):
+    """文字列をピクセルPathとして描画"""
+    text = str(text).upper()
+    rects = []
+    cursor_x = x
+    for char in text:
+        bitmap = PIXEL_FONT.get(char, PIXEL_FONT[' '])
+        for row_idx, row in enumerate(bitmap):
+            for col_idx, ch in enumerate(row):
+                if ch == '█':
+                    rects.append(
+                        f'<rect x="{cursor_x + col_idx * size}" y="{y + row_idx * size}" '
+                        f'width="{size}" height="{size}" fill="{fill}" />'
+                    )
+        cursor_x += (len(bitmap[0]) + 1) * size
+    return "".join(rects)
 
 # -----------------------------------------------------------------------------
 # 3. Logic & Calculations
@@ -118,7 +169,7 @@ def calculate_status(data):
         for edge in repo['languages']['edges']:
             l_name = edge['node']['name']
             l_size = edge['size']
-            lang_sizes[l_name] = lang_sizes.get(l_name, 0) + l_size
+            lang_sizes[l_name] = lang_sizes.get(l_size, 0) + l_size
 
     sorted_langs = sorted(lang_sizes.items(), key=lambda x: x[1], reverse=True)
     main_lang = sorted_langs[0][0] if sorted_langs else "None"
@@ -202,7 +253,7 @@ def calculate_status(data):
     }
 
 # -----------------------------------------------------------------------------
-# 4. Avatar Pixel Art Generator (16x16, 16色制限, 超軽量アニメーション)
+# 4. Avatar Pixel Art Generator (16x16, 16色, カクカク高明度アニメ)
 # -----------------------------------------------------------------------------
 def generate_pixel_avatar_rects(avatar_url, size=16):
     try:
@@ -211,24 +262,21 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
             img_data = res.read()
         
         img = Image.open(BytesIO(img_data)).convert('RGB')
-        
-        # 16x16へリサイズ
         img_small = img.resize((size, size), Image.Resampling.LANCZOS)
         
-        # 16色へ減色処理 (16-color Quantization)
+        # 16色へ減色
         img_16colors = img_small.quantize(colors=16).convert('RGB')
         
         rects_svg = []
-        scale = 6  # 16x16 -> 96x96 (1ドットあたりのサイズを2倍に拡張)
+        scale = 6  # 16x16 -> 96x96
         
-        # 256個のrect生成と16x16用の超軽量アニメーションディレイ計算
         for y in range(size):
             for x in range(size):
                 r, g, b = img_16colors.getpixel((x, y))
                 color_hex = f"#{r:02x}{g:02x}{b:02x}"
                 
-                # 左上(0.0s) -> 右下(1.2s) へのアニメーションウェーブ
-                delay = round(((x + y) / (size * 2)) * 1.2, 2)
+                # 左上 -> 右下へのカクカクしたステップ遅延
+                delay = round(((x + y) / (size * 2)) * 1.5, 2)
                 
                 rects_svg.append(
                     f'<rect class="px-dot" x="{x*scale}" y="{y*scale}" width="{scale}" height="{scale}" '
@@ -243,7 +291,7 @@ def generate_pixel_avatar_rects(avatar_url, size=16):
 # -----------------------------------------------------------------------------
 # 5. SVG Renderer
 # -----------------------------------------------------------------------------
-def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_b64):
+def build_svg(data, user_info, avatar_rects, sub_weapon, accessory):
     status_str = " ".join([f"[{s}]" for s in data['status_effects']]) if data['status_effects'] else "[NORMAL]"
     
     hp_pct = min(1.0, data['hp_cur'] / max(1, data['hp_max']))
@@ -251,44 +299,14 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_b64):
     
     username = user_info['login'].upper()
 
-    font_face_style = ""
-    if font_b64:
-        font_face_style = f"""
-      @font-face {{
-        font-family: 'EmbeddedPixelFont';
-        src: url(data:font/woff2;charset=utf-8;base64,{font_b64}) format('woff2');
-        font-weight: normal;
-        font-style: normal;
-      }}
-        """
+    # ダークモード対応色定義
+    main_text_color = "#2b1d0c"
+    sub_text_color = "#4a3319"
+    badge_text_color = "#8c4a00"
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 320" width="520" height="320">
   <defs>
     <style>
-      {font_face_style}
-
-      /* インライン埋め込みドットフォントの適用 */
-      .text-main, .text-sub, .status-badge {{
-        font-family: 'EmbeddedPixelFont', 'Courier New', monospace;
-        -webkit-font-smoothing: none;
-        -moz-osx-font-smoothing: grayscale;
-        font-smooth: never;
-        text-rendering: pixelated;
-      }}
-
-      .text-main {{
-        font-size: 13px;
-        fill: #2b1d0c;
-      }}
-      .text-sub {{
-        font-size: 10px;
-        fill: #4a3319;
-      }}
-      .status-badge {{
-        font-size: 10px;
-        fill: #8c4a00;
-      }}
-
       /* ライトモード */
       .bg-outer {{ fill: #d8c29d; stroke: #4a3525; stroke-width: 4; }}
       .bg-parchment {{ fill: #f2e3c6; filter: url(#paper-texture); }}
@@ -304,23 +322,20 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_b64):
         .bg-parchment {{ fill: #1f1a2e; }}
         .panel {{ fill: #29223d; stroke: #513e78; }}
         .panel-inner {{ fill: #14111f; stroke: #3d305c; }}
-        .text-main {{ fill: #00ffcc; }}
-        .text-sub {{ fill: #cbb8ff; }}
         .bar-bg {{ fill: #1a1528; stroke: #453566; }}
         .bar-hp {{ fill: #ff4545; }}
         .bar-mp {{ fill: #3892ff; }}
-        .status-badge {{ fill: #ffb703; }}
       }}
 
-      /* 超軽量ドットピクセル発光アニメーション (256個のrectで動作) */
-      @keyframes dot-flash {{
+      /* ドット単位で「はきはき・カクカク」と明度が切り替わるアニメーション (steps使用) */
+      @keyframes dot-flash-sharp {{
         0% {{ filter: brightness(1); }}
-        20% {{ filter: brightness(2.2); }}
-        40% {{ filter: brightness(1); }}
+        10% {{ filter: brightness(2.8); }}
+        20% {{ filter: brightness(1); }}
         100% {{ filter: brightness(1); }}
       }}
       .px-dot {{
-        animation: dot-flash 3.5s infinite ease-in-out;
+        animation: dot-flash-sharp 3s infinite steps(2, start);
       }}
     </style>
 
@@ -341,52 +356,52 @@ def build_svg(data, user_info, avatar_rects, sub_weapon, accessory, font_b64):
   <!-- Header Panel -->
   <rect class="panel" x="16" y="16" width="488" height="40" rx="2" />
   <rect class="panel-inner" x="20" y="20" width="480" height="32" rx="1" />
-  <text class="text-main" x="30" y="41">LV.{data['lv']} {username}</text>
-  <text class="text-main" x="310" y="41">JOB:{data['job']}</text>
+  {render_pixel_text(f"LV.{data['lv']} {username}", 30, 31, 2, main_text_color)}
+  {render_pixel_text(f"JOB:{data['job']}", 310, 31, 2, main_text_color)}
 
   <!-- Avatar & Bars Panel -->
   <rect class="panel" x="16" y="62" width="488" height="112" rx="2" />
   <rect class="panel-inner" x="20" y="66" width="480" height="104" rx="1" />
   
-  <!-- Pixel Avatar (16x16 / 16色制限 / 2倍大ドット) -->
+  <!-- Pixel Avatar (16x16 / 16色制限 / カクカク発光) -->
   <g transform="translate(26, 70)">
     {avatar_rects}
   </g>
 
   <!-- HP Bar -->
-  <text class="text-main" x="134" y="92">HP</text>
+  {render_pixel_text("HP", 134, 82, 2, main_text_color)}
   <rect class="bar-bg" x="162" y="81" width="180" height="12" rx="1" />
   <rect class="bar-hp" x="162" y="81" width="{int(180 * hp_pct)}" height="12" rx="1" />
-  <text class="text-sub" x="350" y="91">{data['hp_cur']}/{data['hp_max']}</text>
+  {render_pixel_text(f"{data['hp_cur']}/{data['hp_max']}", 350, 83, 1, sub_text_color)}
 
   <!-- MP Bar -->
-  <text class="text-main" x="134" y="118">MP</text>
+  {render_pixel_text("MP", 134, 108, 2, main_text_color)}
   <rect class="bar-bg" x="162" y="107" width="180" height="12" rx="1" />
   <rect class="bar-mp" x="162" y="107" width="{int(180 * mp_pct)}" height="12" rx="1" />
-  <text class="text-sub" x="350" y="117">{data['mp_cur']}/{data['mp_max']}</text>
+  {render_pixel_text(f"{data['mp_cur']}/{data['mp_max']}", 350, 109, 1, sub_text_color)}
 
   <!-- Status Effects -->
-  <text class="status-badge" x="134" y="150">STATE: {status_str}</text>
+  {render_pixel_text(f"STATE: {status_str}", 134, 146, 1, badge_text_color)}
 
-  <!-- Bottom Left Panel: Stats (LUKはみ出し完全防止) -->
+  <!-- Bottom Left Panel: Stats -->
   <rect class="panel" x="16" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="20" y="184" width="228" height="116" rx="1" />
-  <text class="text-main" x="28" y="202">-- STATS --</text>
+  {render_pixel_text("-- STATS --", 28, 194, 2, main_text_color)}
 
-  <text class="text-sub" x="28" y="220">STR(PR)</text>  <text class="text-sub" x="88" y="220">:</text> <text class="text-sub" x="98" y="220">{data['str']}</text>
-  <text class="text-sub" x="28" y="235">AGI(CMT)</text> <text class="text-sub" x="88" y="235">:</text> <text class="text-sub" x="98" y="235">{data['agi']}</text>
-  <text class="text-sub" x="28" y="250">INT(REP)</text> <text class="text-sub" x="88" y="250">:</text> <text class="text-sub" x="98" y="250">{data['int']}</text>
-  <text class="text-sub" x="28" y="265">DEX(LNG)</text> <text class="text-sub" x="88" y="265">:</text> <text class="text-sub" x="98" y="265">{data['dex']}</text>
-  <text class="text-sub" x="28" y="280">LUK(STR)</text> <text class="text-sub" x="88" y="280">:</text> <text class="text-sub" x="98" y="280">{data['luk']}</text>
+  {render_pixel_text("STR(PR)", 28, 216, 1, sub_text_color)}  {render_pixel_text(":", 92, 216, 1, sub_text_color)} {render_pixel_text(data['str'], 102, 216, 1, sub_text_color)}
+  {render_pixel_text("AGI(CMT)", 28, 231, 1, sub_text_color)} {render_pixel_text(":", 92, 231, 1, sub_text_color)} {render_pixel_text(data['agi'], 102, 231, 1, sub_text_color)}
+  {render_pixel_text("INT(REP)", 28, 246, 1, sub_text_color)} {render_pixel_text(":", 92, 246, 1, sub_text_color)} {render_pixel_text(data['int'], 102, 246, 1, sub_text_color)}
+  {render_pixel_text("DEX(LNG)", 28, 261, 1, sub_text_color)} {render_pixel_text(":", 92, 261, 1, sub_text_color)} {render_pixel_text(data['dex'], 102, 261, 1, sub_text_color)}
+  {render_pixel_text("LUK(STR)", 28, 276, 1, sub_text_color)} {render_pixel_text(":", 92, 276, 1, sub_text_color)} {render_pixel_text(data['luk'], 102, 276, 1, sub_text_color)}
 
   <!-- Bottom Right Panel: Equipments -->
   <rect class="panel" x="268" y="180" width="236" height="124" rx="2" />
   <rect class="panel-inner" x="272" y="184" width="228" height="116" rx="1" />
-  <text class="text-main" x="280" y="202">-- EQUIP --</text>
+  {render_pixel_text("-- EQUIP --", 280, 194, 2, main_text_color)}
 
-  <text class="text-sub" x="280" y="226">M-WPN</text> <text class="text-sub" x="322" y="226">:</text> <text class="text-sub" x="332" y="226">{data['main_weapon'][:9]}</text>
-  <text class="text-sub" x="280" y="250">S-WPN</text> <text class="text-sub" x="322" y="250">:</text> <text class="text-sub" x="332" y="250">{sub_weapon.upper()[:9]}</text>
-  <text class="text-sub" x="280" y="274">ACC</text>   <text class="text-sub" x="322" y="274">:</text> <text class="text-sub" x="332" y="274">{accessory.upper()[:9]}</text>
+  {render_pixel_text("M-WPN", 280, 220, 1, sub_text_color)} {render_pixel_text(":", 328, 220, 1, sub_text_color)} {render_pixel_text(data['main_weapon'][:9], 338, 220, 1, sub_text_color)}
+  {render_pixel_text("S-WPN", 280, 242, 1, sub_text_color)} {render_pixel_text(":", 328, 242, 1, sub_text_color)} {render_pixel_text(sub_weapon.upper()[:9], 338, 242, 1, sub_text_color)}
+  {render_pixel_text("ACC",   280, 264, 1, sub_text_color)} {render_pixel_text(":", 328, 264, 1, sub_text_color)} {render_pixel_text(accessory.upper()[:9], 338, 264, 1, sub_text_color)}
 </svg>"""
     return svg
 
@@ -415,11 +430,10 @@ if __name__ == "__main__":
     chosen_acc = random.choice(acc_list)
 
     avatar_rects = generate_pixel_avatar_rects(raw_data['avatarUrl'])
-    font_b64 = get_embedded_font_b64()
 
-    svg_content = build_svg(status_data, raw_data, avatar_rects, chosen_sub, chosen_acc, font_b64)
+    svg_content = build_svg(status_data, raw_data, avatar_rects, chosen_sub, chosen_acc)
 
     with open(args.output, 'w', encoding='utf-8') as f:
         f.write(svg_content)
 
-    print(f"Successfully generated {args.output} with embedded pixel font!")
+    print(f"Successfully generated {args.output} with pure pixel vector font!")
